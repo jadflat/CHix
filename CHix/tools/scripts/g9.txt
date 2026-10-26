@@ -1,0 +1,25 @@
+wait 10
+tap A
+wait 70
+rec start 3
+hold LEFT
+wait 20
+hold UP+A
+wait 24
+hold LEFT+A
+wait 12
+release
+wait 30
+hold RIGHT
+wait 11
+hold DOWN
+wait 25
+hold RIGHT
+wait 40
+hold UP+A
+wait 26
+hold RIGHT+A
+wait 11
+release
+wait 40
+rec stop 06_stage9

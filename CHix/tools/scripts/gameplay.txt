@@ -1,30 +1,30 @@
-# docs/gameplay.gif (cl gif): the title, a stage opening, a shape drawn and claimed.
+# docs/gameplay.gif: this script (stage 1), then g5.txt and g9.txt run with -D CHIX_START_LEVEL=5 and 9 into the same out dir, then cl gif --no-run.
 rec start 4
-wait 70
+wait 60
 rec stop 01_title
 rec start 4
 tap A
 wait 50
 rec stop 02_ready
 rec start 3
-hold UP+A
-wait 20
-hold RIGHT+A
-wait 18
-hold DOWN+A
-wait 30
-release
-wait 16
-rec stop 03_claim
-rec start 3
 hold LEFT
-wait 24
-hold UP+B
-wait 14
-hold LEFT+B
-wait 14
-hold DOWN+B
-wait 40
-release
 wait 20
-rec stop 04_slow
+hold UP+A
+wait 24
+hold LEFT+A
+wait 12
+release
+wait 30
+hold RIGHT
+wait 11
+hold DOWN
+wait 25
+hold RIGHT
+wait 40
+hold UP+A
+wait 26
+hold RIGHT+A
+wait 11
+release
+wait 40
+rec stop 03_claim
