@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.2
+
+The music crossfades between stages: the old song fades out over half a second and the new one fades in, instead of cutting over (and the old song's last notes and drums no longer run into the new stage). Sound effects stay at full level through the fade.
+
 ## 1.2.1
 
 The three slow songs (the title, aurora and nebula) are rewritten with a groove and a melody, and the whole mix is about 1.4x louder, with a soft limiter on the peaks.

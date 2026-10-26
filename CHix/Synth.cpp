@@ -36,6 +36,9 @@ Sfx sf = {};
 const SongHdr *cur = nullptr;
 const Inst *ins = SONGS[0].inst;                        // the instruments of the song playing (or the last one, for the release)
 uint8_t sweepNow = 0;
+int8_t curId = -1, pendingId = -2;                       // the song playing, and the one fading in after it (-2: none)
+uint8_t fade = 255;                                      // the music's master level
+int8_t fadeDir = 0;                                      // -1 fading out, +1 fading in
 uint8_t pos = 0;                                        // the step in the song, 0-255
 uint16_t stepCnt = 0, stepLen = 0, envCnt = 0;
 
@@ -64,6 +67,18 @@ void drumOn(uint8_t bits) {
     else if (bits & 4) { dr.kind = 2; dr.vol = 84; dr.decay = 26; }
 }
 
+void startSong(int song) {
+    for (int i = 0; i < 3; i++) { v[i].vol = 0; v[i].gate = false; }     // the last song's notes and drums do not carry into this one
+    dr.vol = 0; kickFlash = 0; sweepNow = 0;
+    if (song < 0 || song >= 9) { cur = nullptr; curId = -1; return; }
+    cur = &SONGS[song];
+    curId = (int8_t)song;
+    ins = cur->inst;
+    stepLen = (uint16_t)(cur->stepMs * SYN_RATE / 1000);
+    stepCnt = 1;
+    pos = 0;
+}
+
 void nextStep() {
     const uint8_t *s[2] = { cur->lead, cur->bass };
     for (int i = 0; i < 3; i++) {
@@ -88,6 +103,15 @@ void sfxStep() {
 }
 
 void envTick() {
+    if (fadeDir < 0) {
+        if (fade > 4) fade -= 4;
+        else {
+            fade = 0;
+            if (pendingId != -2) { startSong(pendingId); pendingId = -2; fadeDir = cur ? 1 : 0; } else fadeDir = 0;
+        }
+    } else if (fadeDir > 0) {
+        if (fade < 251) fade += 4; else { fade = 255; fadeDir = 0; }
+    }
     for (int i = 0; i < 3; i++) {
         Voice &c = v[i];
         const Inst &in = ins[i];
@@ -139,6 +163,7 @@ uint8_t sample() {                                       // runs from flash: the
             mix += (SINE[dr.ph >> 8] * dr.vol) >> 8;
         }
     }
+    if (fade < 255) mix = (mix * fade) >> 8;                           // the crossfade (the effects stay at full level)
     if (sf.amp) {
         sf.ph += sf.inc;
         mix += (sf.ph & 0x8000) ? sf.amp : -sf.amp;
@@ -157,16 +182,17 @@ uint8_t sample() {                                       // runs from flash: the
 #endif
 
 void music(int song) {
+    const int id = (song < 0 || song >= 9) ? -1 : song;
     SYN_LOCK();
-    if (song < 0 || song >= 9) {
-        cur = nullptr;
-        for (int i = 0; i < 3; i++) v[i].gate = false;
-    } else {
-        cur = &SONGS[song];
-        ins = cur->inst;
-        stepLen = (uint16_t)(cur->stepMs * SYN_RATE / 1000);
-        stepCnt = 1;
-        pos = 0;
+    if (!cur) {                                          // nothing playing: start at once and fade in
+        if (id >= 0) { startSong(id); fade = 0; fadeDir = 1; }
+        pendingId = -2;
+    } else if (id == curId) {                            // asked for the song that is playing: keep it (and cancel a fade away from it)
+        pendingId = -2;
+        if (fadeDir < 0) fadeDir = 1;
+    } else {                                             // another song (or silence): fade this one out first
+        pendingId = (int8_t)id;
+        fadeDir = -1;
     }
     SYN_UNLOCK();
 }
