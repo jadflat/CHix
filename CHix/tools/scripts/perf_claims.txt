@@ -1,0 +1,35 @@
+# Frame times around each action of a stage (cl run --device CHix/tools/scripts/perf_claims.txt out/perf): perf prints after every step.
+wait 20
+tap A
+wait 100
+perf s0
+hold LEFT
+wait 20
+perf s1_left
+hold UP+A
+wait 24
+perf s2_up
+hold LEFT+A
+wait 12
+perf s3_close
+release
+wait 30
+perf s4_after
+hold RIGHT
+wait 11
+perf s5
+hold DOWN
+wait 25
+perf s6
+hold RIGHT
+wait 40
+perf s7
+hold UP+A
+wait 26
+perf s8
+hold RIGHT+A
+wait 11
+perf s9_close
+release
+wait 40
+perf s10

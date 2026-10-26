@@ -11,7 +11,7 @@
 #include "Art.h"        // the title picture (tools/gen_art.py)
 #include "Sprites.h"
 #include "Bosses.h"     // the 12x12 boss cores (tools/make_bosses.py)
-#include "Music.h"      // the songs (tools/make_music.py)    // the 8x8 sprites (tools/make_sprites.py)
+#include "Synth.h"      // the sound: a small FM synth and a step sequencer (Synth.cpp, Music.h from tools/make_music.py)
 
 static void blit12(int x, int y, const uint8_t *spr);
 
@@ -34,6 +34,7 @@ AUDIO_STEPS(ST_ZAP)   = { AUDIO_STEP(3200, 700, 80) };
 static const audio::Effect SOUNDS[] = {
     AUDIO_EFFECT(ST_START, 3), AUDIO_EFFECT(ST_STEP, 0 | audio::SOFT), AUDIO_EFFECT(ST_CLAIM, 4), AUDIO_EFFECT(ST_BIG, 5),
     AUDIO_EFFECT(ST_DIE, 8), AUDIO_EFFECT(ST_CLEAR, 7), AUDIO_EFFECT(ST_OVER, 8), AUDIO_EFFECT(ST_LIFE, 6), AUDIO_EFFECT(ST_POWER, 6), AUDIO_EFFECT(ST_ZAP, 5) };
+static void playSfx(uint8_t id) { synth::sfx(SOUNDS[id]); }
 
 static const uint8_t QCOL[4] = { C_Q0, C_Q1, C_TRAIL, C_EDGE };
 
@@ -188,7 +189,7 @@ done:
 static void collect() {
     const PuInfo &in = PUI[pu.type];
     if (pu.type == PU_BONUS) score += 2500;
-    else if (pu.type == PU_LIFE) { if (lives < 6) lives++; audio::sfx(S_LIFE); }
+    else if (pu.type == PU_LIFE) { if (lives < 6) lives++; playSfx(S_LIFE); }
     else if (pu.type == PU_BOMB) {
         for (int i = 0; i < sparkN(); i++) {
             burst(OX + 2 * sp[i].x, OY + 2 * sp[i].y, 8, C_SPARK);
@@ -199,7 +200,7 @@ static void collect() {
     } else puT[pu.type] = in.dur;
     banner = &in; banT = 75;
     burst(OX + 2 * pu.x + 1, OY + 2 * pu.y + 1, 16, in.col);
-    audio::sfx(S_POWER);
+    playSfx(S_POWER);
     pu.life = 0;
 }
 
@@ -246,11 +247,11 @@ static void newLevel() { resetField();
 #ifdef CHIX_DEMO_FILL
     demoFill();
 #endif
-    resetActors(); readyT = 45; applyTheme((level - 1) % 10); audio::music(SONGS[1 + (level - 1) % 4]); }
+    resetActors(); readyT = 45; applyTheme((level - 1) % 10); synth::music(1 + (level - 1) % 4); }
 #ifndef CHIX_START_LEVEL
 #define CHIX_START_LEVEL 1
 #endif
-static void newGame() { won = false; audio::sfx(S_START); nextLife = 10000; lives = 3; level = CHIX_START_LEVEL; score = 0; newLevel(); state = PLAY; won = false; }
+static void newGame() { won = false; playSfx(S_START); nextLife = 10000; lives = 3; level = CHIX_START_LEVEL; score = 0; newLevel(); state = PLAY; won = false; }
 
 static void clearTrail() {
     for (int i = 0; i < trailLen; i++) g[trail[i] >> 6][trail[i] & 63] = EMPTY;
@@ -266,7 +267,7 @@ static void die() {
     px = startX; py = startY;
     drawing = false;
     state = DYING; timer = 40;
-    audio::sfx(S_DIE);
+    playSfx(S_DIE);
 }
 
 // The side without the main enemy is claimed: flood the open cells from it.
@@ -284,7 +285,10 @@ static void snapPlayer() {
     px = bx; py = by;
 }
 
+// Debug builds: the perf report lists the time of each phase of closing a shape (microseconds a close).
+#define PROBE(i) ((i) ? dbg::prof((i) - 1) : dbg::profStart())
 static void closeTrail() {
+    PROBE(0);
     uint8_t v = slowDraw ? SLOW : FAST;
     int gained = trailLen;
     for (int i = 0; i < trailLen; i++) g[trail[i] >> 6][trail[i] & 63] = v;
@@ -310,27 +314,31 @@ static void closeTrail() {
             }
         }
     }
+    PROBE(1);
     int open = 0;
     for (int y = 1; y < H - 1; y++)
         for (int x = 1; x < W - 1; x++) {
             if (g[y][x] == EMPTY) { g[y][x] = v; gained++; }
             else if (g[y][x] & MARK) { g[y][x] &= ~MARK; open++; }
         }
+    PROBE(2);
     markBorders();
+    PROBE(3);
     score += gained * (slowDraw ? 20 : 10) * (puT[PU_X2] ? 2 : 1);
-    if (score >= nextLife) { nextLife += 10000; if (lives < 6) lives++; audio::sfx(S_LIFE); }
-    else audio::sfx(gained > 150 ? S_BIG : S_CLAIM);
+    if (score >= nextLife) { nextLife += 10000; if (lives < 6) lives++; playSfx(S_LIFE); }
+    else playSfx(gained > 150 ? S_BIG : S_CLAIM);
     areaPct = 100 - open * 100 / ((W - 2) * (H - 2));
     for (int i = 0; i < sparkN(); i++) {                 // a Spark the fill swallowed starts again on a border
         if (isBorder(sp[i].x, sp[i].y)) continue;
         burst(OX + 2 * sp[i].x, OY + 2 * sp[i].y, 12, C_SPARK);           // a captured Spark blows up
         burst(OX + 2 * sp[i].x, OY + 2 * sp[i].y, 6, C_EDGE);
-        score += 1000; audio::sfx(S_ZAP);
+        score += 1000; playSfx(S_ZAP);
         bool found = false;
         for (int y = 0; y < H && !found; y++)
             for (int x = 0; x < W && !found; x++)
                 if (isBorder(x, y)) { sp[i].x = x; sp[i].y = y; found = true; }
     }
+    PROBE(4);
     drawing = false;
     burst(OX + 2 * px, OY + 2 * py, gained > 150 ? 16 : 8, slowDraw ? C_SLOWL : C_FASTL);
     flash = 10;
@@ -338,11 +346,12 @@ static void closeTrail() {
     if (gained > 250) shakeT = 6;
     popT = 36; popVal = gained * (slowDraw ? 20 : 10) * (puT[PU_X2] ? 2 : 1);
     snapPlayer();
+    PROBE(5);
     if (areaPct >= tgt()) {
         clearBonus = (areaPct - tgt()) * 100 + 1000;
         score += clearBonus;
         state = CLEARED; timer = CLEAR_TIME;
-        audio::sfx(S_CLEAR);
+        playSfx(S_CLEAR);
     }
 }
 
@@ -360,7 +369,7 @@ static void movePlayer(int dx, int dy, bool a, bool b) {
         }
     } else if (g[ny][nx] == EMPTY) {
         if (trailLen >= 639) return;
-        if (!(trailLen & 3)) audio::sfx(S_STEP);
+        if (!(trailLen & 3)) playSfx(S_STEP);
         g[ny][nx] = TRAIL; trail[trailLen++] = (ny << 6) | nx;
         px = nx; py = ny;
     } else if (claimed(nx, ny)) {
@@ -509,7 +518,7 @@ static void saveProgress(bool inGame) {
 }
 
 static void continueGame() {
-    audio::sfx(S_START);
+    playSfx(S_START);
     won = false;
     level = sv.level; lives = sv.lives; score = sv.score; nextLife = sv.nextLife;
     newLevel();
@@ -530,7 +539,7 @@ static void update() {
             else if (pauseSel == 1) {
                 saveProgress(true);
                 pauseNote = save::available() ? "GAME SAVED" : "SAVING IS OFF";
-            } else { state = TITLE; titleSel = 0; resetField(); applyTheme(0); audio::music(SONGS[0]); }
+            } else { state = TITLE; titleSel = 0; resetField(); applyTheme(0); synth::music(0); }
         }
         return;
     }
@@ -550,13 +559,13 @@ static void update() {
     if (state == OVER) {
         if (won && frameNo % 8 == 0) burst(rnd(110) + 8, rnd(90) + 20, 6, QCOL[rnd(4)]);
         if (timer > 0) timer--;
-        else if (chgame.pressed(A_BUTTON)) { resetField(); state = TITLE; applyTheme(0); audio::music(SONGS[0]); }
+        else if (chgame.pressed(A_BUTTON)) { resetField(); state = TITLE; applyTheme(0); synth::music(0); }
         return;
     }
     if (state == DYING) {
         if (--timer <= 0) {
-            if (--lives <= 0) { state = OVER; timer = 30; audio::sfx(S_OVER); audio::stopMusic(); saveProgress(false); }
-            else { int sx = startX, sy = startY; resetActors(); px = startX = sx; py = startY = sy; snapPlayer(); state = PLAY; respawnT = 36; audio::sfx(S_ZAP); }
+            if (--lives <= 0) { state = OVER; timer = 30; playSfx(S_OVER); synth::music(-1); saveProgress(false); }
+            else { int sx = startX, sy = startY; resetActors(); px = startX = sx; py = startY = sy; snapPlayer(); state = PLAY; respawnT = 36; playSfx(S_ZAP); }
         }
         return;
     }
@@ -568,7 +577,7 @@ static void update() {
         }
         burst(rnd(120) + 4, rnd(100) + 14, 1, QCOL[rnd(4)]);
         if (--timer <= 0) {
-            if (level >= STAGES) { won = true; state = OVER; timer = 120; audio::sfx(S_CLEAR); saveProgress(false); }
+            if (level >= STAGES) { won = true; state = OVER; timer = 120; playSfx(S_CLEAR); saveProgress(false); }
             else { level++; newLevel(); state = PLAY; saveProgress(true); }
         }
         return;
@@ -594,7 +603,7 @@ static void update() {
         if (px != ox || py != oy) { fuse = -1; stallT = 0; }
         else {
             if (stallT < 255) stallT++;
-            if (stallT > 45 && fuse < 0) { fuse = 0; audio::sfx(S_ZAP); }
+            if (stallT > 45 && fuse < 0) { fuse = 0; playSfx(S_ZAP); }
         }
         if (fuse >= 0) {
             fuse += 2;
@@ -616,7 +625,7 @@ static void update() {
         if (tick && frameNo % period == 0) moveSpark(i);
         if (puT[PU_LASER] && (sp[i].x == px || sp[i].y == py)) {   // the lasers sweep the row and column
             burst(OX + 2 * sp[i].x, OY + 2 * sp[i].y, 10, C_SPARK);
-            score += 500; audio::sfx(S_ZAP); placeSpark(i);
+            score += 500; playSfx(S_ZAP); placeSpark(i);
         }
         if (!shield && sp[i].x == px && sp[i].y == py) { die(); return; }
     }
@@ -1036,7 +1045,7 @@ void sim_waitInput();
 void setup() {
     chgame.boot();
 #if CHGAME_DEBUG
-    dbg::begin("CHIX 1.0");
+    dbg::begin("CHIX 1.1");
 #endif
     gfx_begin(GFX_DIV2, GFX_12BPP);
     const uint16_t pal[16] = {
@@ -1046,9 +1055,8 @@ void setup() {
         gfx_rgb(220, 220, 220), gfx_rgb(15, 35, 115), gfx_rgb(115, 65, 10), gfx_rgb(90, 90, 90), gfx_rgb(150, 30, 150) };
     gfx_setPalette(pal, 16);
     for (int i = 0; i < 32; i++) SINT[i] = (int8_t)lroundf(64.0f * sinf(i * 6.2831853f / 32.0f));
-    audio::begin(SOUNDS, S_COUNT);
-    audio::setMusic(audio::LEAD);
-    audio::music(SONGS[0]);
+    synth::begin();
+    synth::music(0);
     chgame.setFrameRate(30);
     SaveData d;
     uint8_t flag = 0;
@@ -1071,7 +1079,6 @@ void loop() {
     startPrev = st;
     dbg::markRenderStart();
     update();
-    audio::update();
     gfx_wait();
     if (saveDue) {
         saveDue = false;
