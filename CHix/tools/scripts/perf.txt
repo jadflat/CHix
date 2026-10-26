@@ -1,0 +1,33 @@
+# Frame times on the board: a stage played for a while (cl run --device -D CHIX_START_LEVEL=8 CHix/tools/scripts/perf.txt out/perf).
+wait 20
+tap A
+wait 80
+hold UP+A
+wait 20
+hold RIGHT+A
+wait 18
+hold DOWN+A
+wait 30
+release
+wait 20
+perf first_claim
+hold LEFT
+wait 30
+hold UP+A
+wait 12
+hold LEFT+A
+wait 14
+hold DOWN+A
+wait 30
+release
+wait 20
+perf second_claim
+hold UP+B
+wait 25
+hold RIGHT+B
+wait 20
+hold DOWN+B
+wait 30
+release
+wait 30
+perf third_claim

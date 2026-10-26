@@ -1,0 +1,30 @@
+# docs/gameplay.gif (cl gif): the title, a stage opening, a shape drawn and claimed.
+rec start 4
+wait 70
+rec stop 01_title
+rec start 4
+tap A
+wait 50
+rec stop 02_ready
+rec start 3
+hold UP+A
+wait 20
+hold RIGHT+A
+wait 18
+hold DOWN+A
+wait 30
+release
+wait 16
+rec stop 03_claim
+rec start 3
+hold LEFT
+wait 24
+hold UP+B
+wait 14
+hold LEFT+B
+wait 14
+hold DOWN+B
+wait 40
+release
+wait 20
+rec stop 04_slow

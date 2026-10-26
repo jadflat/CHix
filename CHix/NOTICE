@@ -1,0 +1,7 @@
+CHix
+Copyright (c) 2026 Jadflat, MIT (see ../LICENSE).
+
+An original game for CHGame inspired by the classic arcade genre of territory-claiming games. All code, art
+and music are original.
+
+Built on CHGame, Copyright 2026 Kevin Bates (bateske), Apache-2.0: the framework is vendored in chgame/ (see chgame/NOTICE and chgame/LICENSE).

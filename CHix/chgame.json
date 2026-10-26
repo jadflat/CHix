@@ -1,0 +1,30 @@
+{
+  "id": "chix",
+  "title": "CHix",
+  "author": "Jadflat",
+  "genre": "Arcade",
+  "description": "Draw lines into the field and claim it, dodging a spinning enemy and its sparks: 25 stages, power-ups and a saved game.",
+  "license": "MIT",
+  "buttons": [
+    {
+      "control": "D-PAD",
+      "action": "Move"
+    },
+    {
+      "control": "A + D-PAD",
+      "action": "Draw a fast line"
+    },
+    {
+      "control": "B + D-PAD",
+      "action": "Draw a slow line (double points)"
+    },
+    {
+      "control": "START",
+      "action": "Pause menu"
+    },
+    {
+      "control": "START (hold 3 s)",
+      "action": "Back to the CHGame menu"
+    }
+  ]
+}
