@@ -25,6 +25,7 @@ Voice v[3];
 
 struct Drum { uint16_t ph, inc, lfsr; uint8_t vol, kind, decay; };      // kind 0 kick, 1 snare, 2 hat
 Drum dr = { 0, 0, 0xACE1, 0, 0, 0 };
+volatile uint8_t kickFlash = 0;                          // set on each kick: the picture can pulse with the beat
 
 struct Sfx { const audio::Step *st; uint8_t n, i, ticks, prio, amp; bool soft; uint16_t inc, ph; int16_t dinc; };
 Sfx sf = {};
@@ -54,16 +55,16 @@ void noteOn(int i, uint8_t n) {
 }
 
 void drumOn(uint8_t bits) {
-    if (bits & 1) { dr.kind = 0; dr.inc = 1310; dr.vol = 175; dr.decay = 14; }              // 160 Hz, dropping
+    if (bits & 1) { kickFlash = 3; dr.kind = 0; dr.inc = 1310; dr.vol = 175; dr.decay = 14; }              // 160 Hz, dropping
     else if (bits & 2) { dr.kind = 1; dr.inc = 1556; dr.vol = 150; dr.decay = 18; }
     else if (bits & 8) { dr.kind = 2; dr.vol = 80; dr.decay = 7; }
     else if (bits & 4) { dr.kind = 2; dr.vol = 84; dr.decay = 26; }
 }
 
 void nextStep() {
-    const uint8_t *s[3] = { cur->lead, cur->bass, cur->arp };
+    const uint8_t *s[2] = { cur->lead, cur->bass };
     for (int i = 0; i < 3; i++) {
-        const uint8_t b = s[i][pos];
+        const uint8_t b = i == 2 ? cur->lead[(uint8_t)(pos - cur->delay)] : s[i][pos];      // the arp is the lead, delayed
         if (b == 0) v[i].gate = false;
         else if (b > 1) noteOn(i, b);
     }
@@ -153,7 +154,7 @@ uint8_t sample() {                                       // runs from flash: the
 
 void music(int song) {
     SYN_LOCK();
-    if (song < 0 || song >= 5) {
+    if (song < 0 || song >= 9) {
         cur = nullptr;
         for (int i = 0; i < 3; i++) v[i].gate = false;
     } else {
@@ -164,6 +165,12 @@ void music(int song) {
         pos = 0;
     }
     SYN_UNLOCK();
+}
+
+uint8_t beat() {                                          // once a frame: nonzero for a few frames after each kick
+    const uint8_t k = kickFlash;
+    if (k) kickFlash = k - 1;
+    return k;
 }
 
 void sfx(const audio::Effect &e) {

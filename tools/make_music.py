@@ -1,15 +1,18 @@
-"""CHix's music: five psytrance tracks, one a subgenre, as step sequences for the software FM synth (CHix/Synth.cpp).
+"""CHix's music: nine tracks (two ambient at 80 bpm, seven psytrance), as step sequences for the software FM synth (CHix/Synth.cpp).
 
-  title    psychill   100 bpm  C dorian         slow bells over a sparse kick
-  stage 1  goa        138 bpm  E double-harmonic an oriental line in 3:1 metallic FM, clap on 2 and 4
-  stage 2  full-on    145 bpm  A phrygian       the rolling bass bounces over octaves, a hypnotic lead
-  stage 3  dark psy   150 bpm  C phrygian       inharmonic 5:1 and 7:1 FM, falling laser runs, offbeat bass
-  stage 4  forest     155 bpm  D minor          swarming up-and-down arps, short plucks, rolling hats
+  title    psychill   80 bpm   C dorian         slow bells over a sparse kick
+(stage 1 is ambient at 80 bpm too; the other songs run 125, 131, 136 and 140 bpm)
+  stage 1  aurora     F lydian          long bells and a drone, 80 bpm, almost no drums
+  stage 2  dark psy   C phrygian        inharmonic 5:1 and 7:1 FM, falling laser runs, one bass note between the kicks
+  stage 3  goa        E double-harmonic an oriental line in 3:1 metallic FM, clap on 2 and 4
+  stage 4  full-on    A phrygian        the rolling bass bounces over octaves, a hypnotic lead
+  stage 5  forest     D minor           swarming up-and-down arps, short plucks, rolling hats
+  stages 26 on, in turn: progressive (D dorian, 128 bpm), nebula (ambient, 80 bpm), hi-tech (F# phrygian, 165 bpm)
 
-A song is 16 bars of sixteen steps; four streams of one byte a step:
+A song is 16 bars of sixteen steps; three streams of one byte a step:
   lead, bass, arp: 0 = rest (the note is released), 1 = hold, 2..127 = a MIDI note (a new note);
   drums: a bit mask, 1 kick, 2 snare, 4 closed hat, 8 open hat.
-The arp is the lead echoed (a delay line) a few steps later, as a psytrance producer would send it to a delay.
+The arp voice plays the lead echoed (a delay line) a few steps later, read from the lead stream, as a psytrance producer would send it to a delay.
 Each song names its own FM instruments (the modulator's ratio, its index and how it decays) and how far
 the index sweeps over four bars, like a filter opening and closing.
 
@@ -27,6 +30,7 @@ SCALES = {
     'phrygian': [0, 1, 3, 5, 7, 8, 10],
     'doubleharm': [0, 1, 4, 5, 7, 8, 11],       # the oriental scale of goa
     'minor': [0, 2, 3, 5, 7, 8, 10],
+    'lydian': [0, 2, 4, 6, 7, 9, 11],
 }
 
 
@@ -72,7 +76,12 @@ def drums(style, bars=16):
     for bar in range(bars):
         d = [0] * 16
         intro = bar < 4
-        if style == 'chill':
+        if style == 'air':
+            if bar % 2 == 0:
+                d[8] |= 4
+            if bar % 4 == 3:
+                d[14] |= 4
+        elif style == 'chill':
             d[0] |= 1; d[8] |= 1
             for s in (4, 12):
                 d[s] |= 4
@@ -93,7 +102,7 @@ def drums(style, bars=16):
                     for s in range(16):
                         if not d[s]:
                             d[s] |= 4                          # rolling hats on every free step
-        if bar % 8 == 7:                                       # a fill into the next eight bars
+        if bar % 8 == 7 and style != 'air':                    # a fill into the next eight bars
             d[12] |= 1; d[13] |= 4; d[14] |= 2; d[15] |= 2
         out.append(d)
     return [x for b in out for x in b]
@@ -102,9 +111,9 @@ def drums(style, bars=16):
 SONGS = []
 
 
-def add(name, ms, sweep, inst, lead, bass, arp, dr):
-    assert len(lead) == len(bass) == len(arp) == len(dr) == 256, name
-    SONGS.append(dict(name=name, ms=ms, sweep=sweep, inst=inst, lead=lead, bass=bass, arp=arp, drums=dr))
+def add(name, ms, sweep, inst, lead, bass, delay, dr, fixed=False):
+    assert len(lead) == len(bass) == len(dr) == 256, name
+    SONGS.append(dict(name=name, ms=ms, sweep=sweep, inst=inst, lead=lead, bass=bass, delay=delay, drums=dr, fixed=fixed))
 
 
 # ---- 0 psychill: slow bells, C dorian, 100 bpm
@@ -112,8 +121,16 @@ P = {'A': [7, N, N, N, N, N, N, N, 9, N, N, N, N, N, N, N], 'B': [10, N, N, N, 9
      'C': [7, N, 9, N, 10, N, N, N, 12, N, N, N, N, N, 10, N], 'D': [5, N, N, N, 7, N, N, N, N, N, 4, N, N, N, N, N]}
 order = ['A', 'B', 'A', 'B', 'C', 'B', 'A', 'D', 'A', 'B', 'C', 'B', 'C', 'D', 'B', 'A']
 lead = lead_stream(72, 'dorian', P, order, [0] * 8)
-add('TITLE', 150, 14, [(1, 30, 1, 6, 100, 1, 50), (1, 20, 3, 4, 110, 1, 70), (2, 26, 3, 2, 52, 3, 0)],
-    lead, bass_stream(72, 'long', [0, 0, 0, 0, -2, -2, 0, 0]), echo(lead, 3), drums('chill'))
+add('TITLE', 188, 14, [(1, 30, 1, 6, 100, 1, 50), (1, 20, 3, 4, 110, 1, 70), (2, 26, 3, 2, 52, 3, 0)],
+    lead, bass_stream(72, 'long', [0, 0, 0, 0, -2, -2, 0, 0]), 3, drums('chill'), fixed=True)
+
+# ---- ambient stage song: F lydian, 80 bpm, long bells and a drone, almost no drums
+P = {'A': [7, N, N, N, 9, N, N, N, 11, N, N, N, N, N, N, N], 'B': [14, N, N, N, N, N, 11, N, N, N, 9, N, N, N, N, N],
+     'C': [9, N, N, N, N, N, 7, N, N, N, 4, N, N, N, N, N], 'D': [11, N, 13, N, N, N, N, N, 14, N, N, N, N, N, N, N]}
+order = list('ABAC' + 'BDAC' + 'ABCD' + 'BADC')
+lead = lead_stream(77, 'lydian', P, order, [0, 0, -3, -3, -5, -5, 0, 0])
+add('AURORA', 188, 10, [(1, 22, 1, 4, 90, 1, 55), (1, 16, 2, 2, 100, 1, 80), (2, 20, 2, 2, 46, 2, 0)],
+    lead, bass_stream(77, 'long', [0, 0, -3, -3, -5, -5, 0, 0]), 3, drums('air'), fixed=True)
 
 # ---- 1 full-on: A phrygian, 145 bpm
 P = {'A': [7, N, 7, N, 8, N, 7, N, 7, N, 10, N, 9, N, 8, N],
@@ -122,7 +139,7 @@ P = {'A': [7, N, 7, N, 8, N, 7, N, 7, N, 10, N, 9, N, 8, N],
 order = list('AABAABCB' + 'AABABCCB')
 lead = lead_stream(69, 'phrygian', P, order, [0, 0, 0, 0, 0, 0, -2, 1])
 add('FULLON', 103, 40, [(2, 54, 3, 12, 112, 2, 40), (1, 44, 6, 6, 125, 3, 75), (3, 40, 5, 3, 62, 5, 0)],
-    lead, bass_stream(69, 'roll_oct', [0, 0, 0, 0, 0, 0, -2, 1]), echo(lead, 3), drums('full'))
+    lead, bass_stream(69, 'roll_oct', [0, 0, 0, 0, 0, 0, -2, 1]), 3, drums('full'))
 
 # ---- 2 goa: E double harmonic, 138 bpm
 P = {'A': [0, 1, 4, N, 5, 4, 1, N, 0, N, 1, 4, 5, N, 7, N],
@@ -131,7 +148,7 @@ P = {'A': [0, 1, 4, N, 5, 4, 1, N, 0, N, 1, 4, 5, N, 7, N],
 order = list('AABABBCA' + 'AABBCBCA')
 lead = lead_stream(76, 'doubleharm', P, order, [0] * 8)
 add('GOA', 109, 28, [(3, 48, 2, 14, 108, 2, 35), (2, 36, 5, 6, 120, 3, 70), (1, 40, 4, 4, 60, 5, 0)],
-    lead, bass_stream(64, 'roll', [0, 0, 0, 0, 1, 1, 0, 0]), echo(lead, 2), drums('goa'))
+    lead, bass_stream(64, 'roll', [0, 0, 0, 0, 1, 1, 0, 0]), 2, drums('goa'))
 
 # ---- 3 dark psy: C phrygian, 150 bpm
 P = {'A': [14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, N],
@@ -140,7 +157,7 @@ P = {'A': [14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, N],
 order = list('CCBCABCA' + 'CBCBAABA')
 lead = lead_stream(72, 'phrygian', P, order, [0] * 8)
 add('DARK', 100, 50, [(5, 60, 2, 20, 105, 1, 45), (1, 50, 7, 8, 128, 4, 70), (7, 46, 4, 10, 58, 4, 0)],
-    lead, bass_stream(72, 'offbeat', [0, 0, 1, 0, 0, 0, 1, 0]), echo(lead, 3), drums('dark'))
+    lead, bass_stream(72, 'offbeat', [0, 0, 1, 0, 0, 0, 1, 0]), 3, drums('dark'))
 
 # ---- 4 forest: D minor, 155 bpm
 P = {'A': [0, 2, 4, 2, 0, 2, 4, 7, 4, 2, 0, 2, 4, 7, 9, 7],
@@ -149,13 +166,42 @@ P = {'A': [0, 2, 4, 2, 0, 2, 4, 7, 4, 2, 0, 2, 4, 7, 9, 7],
 order = list('AABAABBC' + 'AABABBCC')
 lead = lead_stream(74, 'minor', P, order, [0, 0, 0, 0, 0, 0, -2, -2])
 add('FOREST', 97, 34, [(2, 44, 4, 8, 100, 4, 20), (1, 40, 8, 5, 118, 5, 60), (4, 38, 6, 4, 56, 6, 0)],
-    lead, bass_stream(62, 'swarm', [0, 0, 0, 0, 0, 0, -2, -2]), echo(lead, 3), drums('forest'))
+    lead, bass_stream(62, 'swarm', [0, 0, 0, 0, 0, 0, -2, -2]), 3, drums('forest'))
 
-# the stage songs play in order, building from the calmest to the most frantic: goa, full-on, dark psy, forest
+# ---- progressive: D dorian, 128 bpm (stages 26 on)
+P = {'A': [7, N, N, 9, N, N, 10, N, 9, N, N, 7, N, N, 5, N],
+     'B': [7, 9, 10, 9, 7, 9, 10, 12, 10, 9, 7, 5, 7, 9, 10, 9],
+     'C': [14, N, 12, N, 10, N, 9, N, 7, N, N, N, 9, N, 10, N]}
+order = list('AABAABCB' + 'ABABCBCA')
+lead = lead_stream(74, 'dorian', P, order, [0, 0, 0, 0, -2, -2, 3, 3])
+add('PROG', 117, 32, [(2, 46, 3, 10, 108, 2, 38), (1, 42, 6, 6, 122, 3, 72), (4, 36, 5, 3, 58, 5, 0)],
+    lead, bass_stream(62, 'roll_oct', [0, 0, 0, 0, -2, -2, 3, 3]), 3, drums('full'))
+
+# ---- nebula: ambient, A dorian, 80 bpm
+P = {'A': [9, N, N, N, N, N, N, N, 12, N, N, N, N, N, N, N], 'B': [14, N, N, N, 12, N, N, N, 10, N, N, N, N, N, N, N],
+     'C': [7, N, N, N, N, N, 9, N, N, N, N, N, 12, N, N, N], 'D': [16, N, N, N, N, N, N, N, 14, N, N, N, N, N, 12, N]}
+order = list('ABCD' + 'ACBD' + 'ABAD' + 'CDBA')
+lead = lead_stream(69, 'dorian', P, order, [0, 0, -2, -2, -4, -4, 0, 0])
+add('NEBULA', 188, 8, [(1, 18, 1, 3, 88, 1, 52), (1, 14, 2, 2, 100, 1, 82), (3, 18, 2, 2, 44, 2, 0)],
+    lead, bass_stream(69, 'long', [0, 0, -2, -2, -4, -4, 0, 0]), 4, drums('air'), fixed=True)
+
+# ---- hi-tech: F# phrygian, 165 bpm (the last stages)
+P = {'A': [7, N, 7, 8, 7, N, 10, 7, 7, N, 7, 8, 7, 12, 10, 8],
+     'B': [14, 12, 10, 8, 7, 8, 10, 12, 14, 12, 10, 8, 7, N, N, N],
+     'C': [0, N, 0, 1, N, 0, 3, N, 0, N, 0, 1, N, 3, 1, N]}
+order = list('CCABCCAB' + 'ABABCABB')
+lead = lead_stream(66, 'phrygian', P, order, [0, 0, 0, 1, 0, 0, -2, 1])
+add('HITECH', 91, 56, [(6, 58, 3, 18, 108, 2, 40), (1, 46, 7, 8, 126, 4, 74), (5, 44, 4, 8, 60, 4, 0)],
+    lead, bass_stream(66, 'swarm', [0, 0, 0, 1, 0, 0, -2, 1]), 2, drums('forest'))
+
+# the stage songs play in order, building from the calmest to the most frantic: aurora (ambient), dark psy, goa, full-on, forest
 byname = {sg['name']: sg for sg in SONGS}
-SONGS = [byname[n] for n in ('TITLE', 'GOA', 'FULLON', 'DARK', 'FOREST')]
+SONGS = [byname[n] for n in ('TITLE', 'AURORA', 'DARK', 'GOA', 'FULLON', 'FOREST', 'PROG', 'NEBULA', 'HITECH')]
+for sg in SONGS:                                   # a little slower: a step is a tenth longer (the ambient songs are fixed at 80 bpm)
+    if not sg['fixed']:
+        sg['ms'] = int(round(sg['ms'] * 1.1))
 
-out = ["// Generated by tools/make_music.py: five psytrance step sequences for the FM synth, the sine table and the pitch table.",
+out = ["// Generated by tools/make_music.py: six step sequences for the FM synth, the sine table and the pitch table.",
        "#pragma once", "#include <stdint.h>", "", "#define SYN_RATE %d" % RATE, ""]
 out.append("static const int8_t SINE[256] = {")
 sine = [int(round(127 * math.sin(i * 2 * math.pi / 256))) for i in range(256)]
@@ -168,19 +214,19 @@ out.append("static const uint16_t NOTE_INC16[12] = { " + ", ".join(str(v) for v 
 out.append("// an FM voice: the modulator's ratio to the carrier, its index at the start, how fast it falls and where it stops,")
 out.append("// the voice's volume at the start, how fast it falls while held and where it stops")
 out.append("struct Inst { uint8_t ratio, idx0, idxDecay, idxFloor, amp, volDecay, volFloor; };")
-out.append("struct SongHdr { const uint8_t *lead, *bass, *arp, *drums; const Inst *inst; uint8_t stepMs, sweep; };")
+out.append("struct SongHdr { const uint8_t *lead, *bass, *drums; const Inst *inst; uint8_t stepMs, sweep, delay; };   // the arp is the lead delayed by `delay` steps")
 for sg in SONGS:
     nm = sg['name']
     out.append("static const Inst %s_INST[3] = { %s };" % (nm, ", ".join("{ %s }" % ", ".join(str(x) for x in i) for i in sg['inst'])))
-    for part in ('lead', 'bass', 'arp', 'drums'):
+    for part in ('lead', 'bass', 'drums'):
         out.append("static const uint8_t %s_%s[256] = {" % (nm, part.upper()))
         for i in range(0, 256, 32):
             out.append("    " + ",".join(str(v) for v in sg[part][i:i + 32]) + ",")
         out.append("};")
-out.append("static const SongHdr SONGS[5] = {")
+out.append("static const SongHdr SONGS[9] = {")
 for sg in SONGS:
     nm = sg['name']
-    out.append("    { %s_LEAD, %s_BASS, %s_ARP, %s_DRUMS, %s_INST, %d, %d }," % (nm, nm, nm, nm, nm, sg['ms'], sg['sweep']))
+    out.append("    { %s_LEAD, %s_BASS, %s_DRUMS, %s_INST, %d, %d, %d }," % (nm, nm, nm, nm, sg['ms'], sg['sweep'], sg['delay']))
 out.append("};")
 open(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'CHix', 'Music.h'), 'w', newline='').write("\n".join(out) + "\n")
 print("wrote Music.h")

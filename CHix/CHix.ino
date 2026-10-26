@@ -8,12 +8,17 @@
 // The playfield is a 60x56 grid of 2x2-pixel cells; the frame buffer is written directly (4 bits a pixel:
 // a 2-pixel cell is one byte a row).
 #include <CHGame.h>
+#ifndef CHIX_SLIM                  // (a perf build leaves the title picture out so the debug image fits)
 #include "Art.h"        // the title picture (tools/gen_art.py)
+#endif
 #include "Sprites.h"
+#include "Shapes.h"     // the late-game wireframes (tools/make_shapes.py)
 #include "Bosses.h"     // the 12x12 boss cores (tools/make_bosses.py)
 #include "Synth.h"      // the sound: a small FM synth and a step sequencer (Synth.cpp, Music.h from tools/make_music.py)
 
 static void blit12(int x, int y, const uint8_t *spr);
+static inline bool enemyTwin();
+static bool freeAt(int ax, int ay);
 
 enum { W = 60, H = 56, OX = 4, OY = 14, };
 enum Cell : uint8_t { EMPTY = 0, FAST = 1, SLOW = 2, TRAIL = 3, MARK = 0x10, BORD = 0x20 };   // BORD: cached border flag on claimed cells
@@ -53,19 +58,22 @@ static const Theme THEMES[10] = {
     { {130,140,160}, {210,220,235}, {55,60,75},  {200,70,90}, {255,150,165},  {90,30,40},   {255,255,255}, {100,105,120} } }; // steel
 static int theme;
 
+static uint8_t variant;                                        // 0..2: which turn of the colours this stage has (every ten stages)
+static uint16_t tint(const uint8_t *c) { return gfx_rgb(c[variant % 3], c[(variant + 1) % 3], c[(variant + 2) % 3]); }
 static void buildScene(int t);
 static void applyTheme(int t) {
     theme = t;
     buildScene(t);
     const Theme &h = THEMES[t];
-    gfx_setPaletteEntry(1, gfx_rgb(h.fast[0], h.fast[1], h.fast[2]));
-    gfx_setPaletteEntry(9, gfx_rgb(h.fastL[0], h.fastL[1], h.fastL[2]));
-    gfx_setPaletteEntry(12, gfx_rgb(h.fastD[0], h.fastD[1], h.fastD[2]));
-    gfx_setPaletteEntry(2, gfx_rgb(h.slow[0], h.slow[1], h.slow[2]));
-    gfx_setPaletteEntry(10, gfx_rgb(h.slowL[0], h.slowL[1], h.slowL[2]));
-    gfx_setPaletteEntry(13, gfx_rgb(h.slowD[0], h.slowD[1], h.slowD[2]));
-    gfx_setPaletteEntry(4, gfx_rgb(h.edge[0], h.edge[1], h.edge[2]));
-    gfx_setPaletteEntry(14, gfx_rgb(h.frame[0], h.frame[1], h.frame[2]));
+    gfx_setPaletteEntry(1, tint(h.fast));
+    gfx_setPaletteEntry(9, tint(h.fastL));
+    gfx_setPaletteEntry(12, tint(h.fastD));
+    gfx_setPaletteEntry(2, tint(h.slow));
+    gfx_setPaletteEntry(10, tint(h.slowL));
+    gfx_setPaletteEntry(13, tint(h.slowD));
+    gfx_setPaletteEntry(4, tint(h.edge));
+    gfx_setPaletteEntry(14, tint(h.frame));
+    gfx_setPaletteEntry(7, gfx_rgb(0, 255, 255));                  // (from stage 26 the lights cycle through the rainbow)
 }
 
 
@@ -80,15 +88,16 @@ static State state;
 static int px, py, startX, startY;
 static bool drawing, slowDraw;
 static int lives, level, score, areaPct, timer, frameNo;
-enum { STAGES = 25 };
-static inline int tgt() { return 70 + (level - 1) / 3; }            // the share to claim: 70% rising to 78%
-static inline int sparkN() { return level >= 8 ? 3 : 2; }           // a third Spark from stage 8
+enum { STAGES = 45 };
+static inline int tgt() { return level <= 25 ? 70 + (level - 1) / 3 : 78 + (level - 25) / 5; }   // the share to claim: 70% rising to 82%
+static inline int sparkN() { return level >= 30 ? 4 : level >= 8 ? 3 : 2; }   // a third Spark from stage 8, a fourth from 30
 static uint32_t rng = 12345;
 
 struct Spark { int x, y, dx, dy; bool right; };
-static Spark sp[3];
-static uint8_t sh[3][3][2];                    // each Spark's last three cells, for its afterglow
+static Spark sp[4];
+static uint8_t sh[4][3][2];                    // each Spark's last three cells, for its afterglow
 static int flash, clearBonus, popVal;
+static uint8_t combo, comboT;                                   // claims within four seconds of each other multiply the score
 static uint8_t ringT, ringCol, hitT, popT, readyT, respawnT, shakeT;   // respawnT: the closing circle after a death
 static int16_t ringX, ringY, popX, popY;
 static const int8_t COS24[24] = { 64, 62, 55, 45, 32, 17, 0, -17, -32, -45, -55, -62, -64, -62, -55, -45, -32, -17, 0, 17, 32, 45, 55, 62 };
@@ -226,8 +235,10 @@ static void resetActors() {
     sp[0] = { 1, 0, 1, 0, false };
     sp[1] = { W - 2, 0, -1, 0, true };
     sp[2] = { W / 2, 0, 1, 0, false };
+    sp[3] = { 0, H / 2, 0, -1, false };
+    combo = comboT = 0;
     fuse = -1; stallT = 0;
-    for (int i = 0; i < 3; i++)
+    for (int i = 0; i < 4; i++)
         for (int k = 0; k < 3; k++) { sh[i][k][0] = sp[i].x; sh[i][k][1] = sp[i].y; }
     for (int i = 0; i < 2; i++) {
         qx[i] = (W / 2 + (i ? 6 : -6)) * 16; qy[i] = (H / 2 + (i ? -5 : 5)) * 16;
@@ -247,7 +258,7 @@ static void newLevel() { resetField();
 #ifdef CHIX_DEMO_FILL
     demoFill();
 #endif
-    resetActors(); readyT = 45; applyTheme((level - 1) % 10); synth::music(1 + (level - 1) % 4); }
+    resetActors(); readyT = 45; variant = (uint8_t)(((level - 1) / 10) % 3); applyTheme((level - 1) % 10); synth::music(level <= 25 ? 1 + (level - 1) % 5 : 6 + (level - 26) % 3); }
 #ifndef CHIX_START_LEVEL
 #define CHIX_START_LEVEL 1
 #endif
@@ -324,9 +335,12 @@ static void closeTrail() {
     PROBE(2);
     markBorders();
     PROBE(3);
-    score += gained * (slowDraw ? 20 : 10) * (puT[PU_X2] ? 2 : 1);
+    const int cm = comboT ? (combo < 5 ? combo + 1 : 5) : 1;       // each claim within four seconds of the last: x2, x3 ... x5
+    combo = (uint8_t)cm; comboT = 120;
+    const int pts = gained * (slowDraw ? 20 : 10) * (puT[PU_X2] ? 2 : 1) * cm;
+    score += pts;
     if (score >= nextLife) { nextLife += 10000; if (lives < 6) lives++; playSfx(S_LIFE); }
-    else playSfx(gained > 150 ? S_BIG : S_CLAIM);
+    else playSfx(gained > 150 || cm >= 3 ? S_BIG : S_CLAIM);
     areaPct = 100 - open * 100 / ((W - 2) * (H - 2));
     for (int i = 0; i < sparkN(); i++) {                 // a Spark the fill swallowed starts again on a border
         if (isBorder(sp[i].x, sp[i].y)) continue;
@@ -338,13 +352,22 @@ static void closeTrail() {
             for (int x = 0; x < W && !found; x++)
                 if (isBorder(x, y)) { sp[i].x = x; sp[i].y = y; found = true; }
     }
+    if (enemyTwin()) {                                // a twin caught in the claimed ground blows up: it comes back beside the other
+        int tx = qx[1] >> 4, ty = qy[1] >> 4;
+        if (inb(tx, ty) && claimed(tx, ty)) {
+            burst(OX + 2 * tx, OY + 2 * ty, 16, C_Q0);
+            score += 3000; playSfx(S_ZAP);
+            qx[1] = qx[0] + 5 * 16; qy[1] = qy[0] + 5 * 16;
+            if (!freeAt(qx[1], qy[1])) { qx[1] = qx[0]; qy[1] = qy[0]; }
+        }
+    }
     PROBE(4);
     drawing = false;
     burst(OX + 2 * px, OY + 2 * py, gained > 150 ? 16 : 8, slowDraw ? C_SLOWL : C_FASTL);
     flash = 10;
     ringT = 14; ringX = popX = OX + 2 * px + 1; ringY = popY = OY + 2 * py + 1; ringCol = slowDraw ? C_SLOWL : C_FASTL;
     if (gained > 250) shakeT = 6;
-    popT = 36; popVal = gained * (slowDraw ? 20 : 10) * (puT[PU_X2] ? 2 : 1);
+    popT = 36; popVal = pts;
     snapPlayer();
     PROBE(5);
     if (areaPct >= tgt()) {
@@ -403,7 +426,7 @@ static bool freeAt(int ax, int ay) {
 static void moveCore() {
     for (int i = 0; i < 2; i++) {
         if ((frameNo & 15) == i * 7) {
-            int lim = 12 + min(level * 2 / 3, 12);              // the core gets faster
+            int lim = 12 + min(level * 2 / 3, 14);              // the core gets faster
             qvx[i] = constrain(qvx[i] + rnd(5) - 2, -lim, lim);
             qvy[i] = constrain(qvy[i] + rnd(5) - 2, -lim, lim);
             if (qvx[i] == 0) qvx[i] = 3;
@@ -415,7 +438,7 @@ static void moveCore() {
         else { qvx[i] = -qvx[i]; qvy[i] = -qvy[i]; }
     }
     int ddx = qx[1] - qx[0], ddy = qy[1] - qy[0];                 // keep the line short: pull the ends together
-    if (abs(ddx) + abs(ddy) > 16 * 16) {
+    if (!enemyTwin() && abs(ddx) + abs(ddy) > 16 * 16) {
         qvx[0] += ddx > 0; qvx[0] -= ddx < 0; qvx[1] -= ddx > 0; qvx[1] += ddx < 0;
         qvy[0] += ddy > 0; qvy[0] -= ddy < 0; qvy[1] -= ddy > 0; qvy[1] += ddy < 0;
     }
@@ -439,21 +462,30 @@ static const int8_t V_ICO[12][3] = { {0,12,19}, {12,19,0}, {19,0,12}, {0,12,-19}
 static const uint8_t E_ICO[30][2] = { {0,1}, {0,2}, {0,5}, {0,6}, {0,7}, {1,2}, {1,3}, {1,7}, {1,8}, {2,4}, {2,6}, {2,8}, {3,7}, {3,8}, {3,9}, {3,11}, {4,6}, {4,8}, {4,9}, {4,10}, {5,6}, {5,7}, {5,10}, {5,11}, {6,10}, {7,11}, {8,9}, {9,10}, {9,11}, {10,11} };
 static const int8_t V_TESS[16][3] = { {-18,-18,-18}, {18,-18,-18}, {-18,18,-18}, {18,18,-18}, {-18,-18,18}, {18,-18,18}, {-18,18,18}, {18,18,18}, {-8,-8,-8}, {8,-8,-8}, {-8,8,-8}, {8,8,-8}, {-8,-8,8}, {8,-8,8}, {-8,8,8}, {8,8,8} };
 static const uint8_t E_TESS[32][2] = { {0,1}, {1,3}, {3,2}, {2,0}, {4,5}, {5,7}, {7,6}, {6,4}, {0,4}, {1,5}, {2,6}, {3,7}, {8,9}, {9,11}, {11,10}, {10,8}, {12,13}, {13,15}, {15,14}, {14,12}, {8,12}, {9,13}, {10,14}, {11,15}, {0,8}, {1,9}, {2,10}, {3,11}, {4,12}, {5,13}, {6,14}, {7,15} };
-static const Shape SHAPES[7] = {
+static const Shape SHAPES[12] = {
     { V_CUBE, E_CUBE, 8, 12 }, { V_OCTA, E_OCTA, 6, 12 }, { V_PYRA, E_PYRA, 5, 8 }, { V_PRISM, E_PRISM, 6, 9 },
-    { V_HEX, E_HEX, 12, 18 }, { V_ICO, E_ICO, 12, 30 }, { V_TESS, E_TESS, 16, 32 } };
-static const char *const ENEMY_NAMES[8] = { "ORIGIN CORE", "CUBE DRONE", "OCTA CORE", "PYRA SCOUT", "PRISM HUNTER", "HEX WARDEN", "ICOSA MIND", "TESSERACT" };
+    { V_HEX, E_HEX, 12, 18 }, { V_ICO, E_ICO, 12, 30 }, { V_TESS, E_TESS, 16, 32 },
+    { V_STAR, E_STAR, 8, 12 }, { V_RING, E_RING, 16, 24 }, { V_CUBOCTA, E_CUBOCTA, 12, 24 }, { V_SPIRE, E_SPIRE, 6, 12 },
+    { V_CROSS, E_CROSS, 7, 18 } };
+static const char *const ENEMY_NAMES[13] = { "ORIGIN CORE", "CUBE DRONE", "OCTA CORE", "PYRA SCOUT", "PRISM HUNTER", "HEX WARDEN",
+                                             "ICOSA MIND", "TESSERACT", "STAR CORE", "RING WARDEN", "CUBOCTA", "SPIRE LORD", "CROSS GATE" };
+// Stages 26 to 45: five new solids, then twins of everything, ending on twin tesseracts.
+static const uint8_t LATE[20] = { 8, 9, 10, 11, 12, 0x81, 0x82, 0x83, 0x84, 0x85, 0x88, 0x89, 0x8A, 0x8B, 0x8C, 0x86, 0x87, 0x86, 0x87, 0x87 };
 static int8_t SINT[32];                                     // sin * 64, 32 steps a turn (built in setup)
 static uint16_t rot;
 static int16_t polyX[16], polyY[16], polyZ[16];                // projected corners: pixels, and depth
 
-static inline int enemyKind() { return (level - 1) % 8; }   // 0: the roaming line, 1..7: SHAPES[kind - 1]
+static inline int enemyCode() { return level <= 25 ? (level - 1) % 8 : LATE[level - 26]; }
+static inline int enemyKind() { return enemyCode() & 127; }   // 0: the roaming line, 1..12: SHAPES[kind - 1]
+static inline bool enemyTwin() { return (enemyCode() & 128) != 0; }   // two solids, one at each end of the line
+static inline int coreSprite() { int k = enemyKind(); return k < 8 ? k : (k - 1) % 7 + 1; }
 
-static void projectPoly() {
+static void projectPoly(int body) {
     const Shape &sh = SHAPES[enemyKind() - 1];
     int ay = (rot >> 1) & 31, ax = ((rot * 3) >> 2) & 31;
+    if (body) { ay = (ay + 16) & 31; ax = (ax + 9) & 31; }          // the twin spins out of step
     int sa = SINT[ay], ca = SINT[(ay + 8) & 31], sb = SINT[ax], cb = SINT[(ax + 8) & 31];
-    int cx = OX + ((qx[0] * 2) >> 4), cy = OY + ((qy[0] * 2) >> 4);
+    int cx = OX + ((qx[body] * 2) >> 4), cy = OY + ((qy[body] * 2) >> 4);
     for (int i = 0; i < sh.nv; i++) {
         int x = sh.v[i][0], y = sh.v[i][1], z = sh.v[i][2];
         int x1 = (x * ca + z * sa) >> 6, z1 = (z * ca - x * sa) >> 6;
@@ -479,20 +511,31 @@ static bool polyHits() {                                    // an edge crosses t
 
 static void drawPoly() {
     const Shape &sh = SHAPES[enemyKind() - 1];
-    bool ice = puT[PU_FREEZE] != 0;
-    for (int e = 0; e < sh.ne; e++) {
-        int a = sh.e[e][0], b = sh.e[e][1];
-        int x0 = polyX[a], y0 = polyY[a], x1 = polyX[b], y1 = polyY[b];
-        uint8_t c = ice ? C_FASTL : (polyZ[a] + polyZ[b] < 0) ? C_EDGE : C_Q0;   // near edges bright, far edges cyan
-        int n = max(abs(x1 - x0), abs(y1 - y0));
-        for (int i = 0; i <= n; i++) gfx_pixel(n ? x0 + (x1 - x0) * i / n : x0, n ? y0 + (y1 - y0) * i / n : y0, c);
+    const bool ice = puT[PU_FREEZE] != 0;
+    for (int body = 0; body < (enemyTwin() ? 2 : 1); body++) {
+        projectPoly(body);
+        for (int e = 0; e < sh.ne; e++) {
+            int a = sh.e[e][0], b = sh.e[e][1];
+            int x0 = polyX[a], y0 = polyY[a], x1 = polyX[b], y1 = polyY[b];
+            uint8_t c = ice ? C_FASTL : (polyZ[a] + polyZ[b] < 0) ? C_EDGE : C_Q0;   // near edges bright, far edges cyan
+            int n = max(abs(x1 - x0), abs(y1 - y0));
+            for (int i = 0; i < n + 1; i++) gfx_pixel(n ? x0 + (x1 - x0) * i / n : x0, n ? y0 + (y1 - y0) * i / n : y0, c);
+        }
+        for (int i = 0; i < sh.nv; i++) gfx_fillRect(polyX[i] - 1, polyY[i] - 1, 2, 2, ice ? C_EDGE : C_TRAIL);
+#ifndef CHIX_SLIM
+        blit12(OX + ((qx[body] * 2) >> 4) - 6, OY + ((qy[body] * 2) >> 4) - 6, BOSSES[coreSprite()]);       // the core
+#endif
     }
-    for (int i = 0; i < sh.nv; i++) gfx_fillRect(polyX[i] - 1, polyY[i] - 1, 2, 2, ice ? C_EDGE : C_TRAIL);
-    blit12(OX + ((qx[0] * 2) >> 4) - 6, OY + ((qy[0] * 2) >> 4) - 6, BOSSES[enemyKind()]);       // the core
 }
 
 static bool coreHits() {
-    if (enemyKind()) return polyHits();
+    if (enemyKind()) {
+        for (int body = 0; body < (enemyTwin() ? 2 : 1); body++) {
+            projectPoly(body);
+            if (polyHits()) return true;
+        }
+        return false;
+    }
     for (int s = 0; s <= 12; s++) {
         int x = ((qx[0] * (12 - s) + qx[1] * s) / 12) >> 4, y = ((qy[0] * (12 - s) + qy[1] * s) / 12) >> 4;
         if (!inb(x, y)) continue;
@@ -539,7 +582,7 @@ static void update() {
             else if (pauseSel == 1) {
                 saveProgress(true);
                 pauseNote = save::available() ? "GAME SAVED" : "SAVING IS OFF";
-            } else { state = TITLE; titleSel = 0; resetField(); applyTheme(0); synth::music(0); }
+            } else { state = TITLE; titleSel = 0; resetField(); variant = 0; applyTheme(0); synth::music(0); }
         }
         return;
     }
@@ -559,7 +602,7 @@ static void update() {
     if (state == OVER) {
         if (won && frameNo % 8 == 0) burst(rnd(110) + 8, rnd(90) + 20, 6, QCOL[rnd(4)]);
         if (timer > 0) timer--;
-        else if (chgame.pressed(A_BUTTON)) { resetField(); state = TITLE; applyTheme(0); synth::music(0); }
+        else if (chgame.pressed(A_BUTTON)) { resetField(); state = TITLE; variant = 0; applyTheme(0); synth::music(0); }
         return;
     }
     if (state == DYING) {
@@ -591,6 +634,8 @@ static void update() {
     else if (dx) horiz = true;
     else if (dy) horiz = false;
     if (banT) banT--;
+    if (comboT && !--comboT) combo = 0;
+    if ((theme == 0 || theme == 6) && !(rnd32() % 420)) flash = 4;           // lightning in the rainy cities
     int ox = px, oy = py;
     bool slowMove = !puT[PU_SPEED] && (drawing ? slowDraw : (b && !a));
     for (int step = 0; step < (puT[PU_SPEED] ? 2 : 1); step++) {
@@ -619,10 +664,9 @@ static void update() {
     bool frozen = puT[PU_FREEZE] != 0, shield = puT[PU_SHIELD] != 0;
     bool tick = !frozen && (!puT[PU_SLOW] || (frameNo & 1));
     if (tick) { moveCore(); rot++; }
-    if (enemyKind()) projectPoly();
     int period = level >= 6 ? 1 : 2;                   // the Spark speed up from stage 6
     for (int i = 0; i < sparkN(); i++) {
-        if (tick && frameNo % period == 0) moveSpark(i);
+        if (tick && frameNo % period == 0) { moveSpark(i); if (level >= 36 && (frameNo & 1)) moveSpark(i); }   // the last stages' sparks run faster
         if (puT[PU_LASER] && (sp[i].x == px || sp[i].y == py)) {   // the lasers sweep the row and column
             burst(OX + 2 * sp[i].x, OY + 2 * sp[i].y, 10, C_SPARK);
             score += 500; playSfx(S_ZAP); placeSpark(i);
@@ -658,7 +702,7 @@ static inline uint32_t mixHash(uint32_t a, uint32_t b) { return (a * 2654435761u
 
 static void buildScene(int t) {
     scene = &SCENES[t];
-    uint32_t r = scene->seed * 2654435761u + 12345u;
+    uint32_t r = (scene->seed + variant * 17u) * 2654435761u + 12345u;
     for (int layer = 0; layer < 3; layer++) {                  // far, middle, near
         uint8_t *h = layer == 0 ? farH : layer == 1 ? midH : nearH;
         int lo = layer == 0 ? scene->farMin : layer == 1 ? (scene->farMin + scene->nearMin) / 2 : scene->nearMin;
@@ -736,7 +780,11 @@ static void drawScene() {
 }
 
 
+static const uint8_t HUE[12][3] = { {255,60,60}, {255,160,40}, {255,240,60}, {160,255,60}, {60,255,100}, {60,255,220},
+                                    {60,180,255}, {100,100,255}, {180,80,255}, {255,70,230}, {255,70,140}, {255,90,90} };
+
 static void drawCells() {
+    if (level > 25 && state != TITLE) { const uint8_t *hc = HUE[(frameNo >> 2) % 12]; gfx_setPaletteEntry(7, gfx_rgb(hc[0], hc[1], hc[2])); }   // the lights cycle
     bool cl = state == CLEARED;
     int wipe = cl ? (CLEAR_TIME - timer) * H / 45 : 0;               // the scan that fills what is left
     for (int y = 0; y < H; y++) {
@@ -763,8 +811,9 @@ static void drawCells() {
         }
     }
     int x0 = OX - 2, y0 = OY - 2, w = 2 * W + 4, h = 2 * H + 4;       // the frame round the field
-    gfx_fillRect(x0, y0, w, 1, C_FRAME); gfx_fillRect(x0, y0 + h - 1, w, 1, C_FRAME);
-    gfx_fillRect(x0, y0, 1, h, C_FRAME); gfx_fillRect(x0 + w - 1, y0, 1, h, C_FRAME);
+    const uint8_t fc = synth::beat() ? C_Q0 : C_FRAME;                 // it lights up on every kick
+    gfx_fillRect(x0, y0, w, 1, fc); gfx_fillRect(x0, y0 + h - 1, w, 1, fc);
+    gfx_fillRect(x0, y0, 1, h, fc); gfx_fillRect(x0 + w - 1, y0, 1, h, fc);
 }
 
 // A Spark: a spinning four-point spark with a fading afterglow.
@@ -877,6 +926,7 @@ static void draw() {
     gfx_clear(C_BG);
     char s[40];
     if (state == TITLE) {
+#ifndef CHIX_SLIM
         for (int y = 0; y < 64; y++) {                              // the picture, doubled
             const uint8_t *src = TITLE_ART + y * 32;
             uint8_t *d0 = gfx_fb + 2 * y * GFX_FB_STRIDE, *d1 = d0 + GFX_FB_STRIDE;
@@ -886,6 +936,7 @@ static void draw() {
                 d0[2 * x + 1] = d1[2 * x + 1] = b | (b << 4);
             }
         }
+#endif
         drawLogo(8);
         panelBox(10, 72, 108, 32, C_Q0);
         gfx_text(16, 76, "A  DRAW FAST", C_Q0);
@@ -910,12 +961,16 @@ static void draw() {
             QLine &l = qh[(qhead + Q_HIST - i) % Q_HIST];
             drawLine(l.x1, l.y1, l.x2, l.y2, puT[PU_FREEZE] ? (i ? C_FASTL : C_EDGE) : (i ? QCOL[i & 3] : C_TRAIL));
         }
+#ifndef CHIX_SLIM
         blit12(OX + ((qx[0] + qx[1]) >> 4) - 6, OY + ((qy[0] + qy[1]) >> 4) - 6, BOSSES[0]);          // its glowing heart
+#endif
     }
     if (pu.life && (pu.life > 45 || (frameNo & 4))) {                // the pick-up, bobbing
         const PuInfo &in = PUI[pu.type];
         int bx = OX + 2 * pu.x - 3, by = OY + 2 * pu.y - 3 + ((frameNo >> 3) & 1);
+#ifndef CHIX_SLIM
         blit8(bx, by, ICONS[pu.type]);
+#endif
         if (frameNo & 4) {                                            // corner glints
             gfx_pixel(bx - 1, by - 1, in.col); gfx_pixel(bx + 8, by - 1, in.col);
             gfx_pixel(bx - 1, by + 8, in.col); gfx_pixel(bx + 8, by + 8, in.col);
@@ -966,6 +1021,10 @@ static void draw() {
         uint8_t c = ringT < 5 ? C_FRAME : ringCol;
         for (int k = 0; k < 24; k++) gfx_pixel(ringX + COS24[k] * r / 64, ringY + COS24[(k + 18) % 24] * r / 64, c);
     }
+    if (comboT && combo >= 2 && (comboT > 30 || (frameNo & 2))) {                            // the combo
+        snprintf(s, sizeof s, "COMBO X%d", combo);
+        gfx_text(2, 105, s, C_TRAIL);
+    }
     if (popT) {                                                       // the points, floating up
         const char *word = popVal >= 4000 ? "AWESOME " : popVal >= 1500 ? "GREAT " : popVal >= 600 ? "NICE " : "";
         snprintf(s, sizeof s, "%s+%d", word, popVal);
@@ -982,7 +1041,9 @@ static void draw() {
         gfx_fillRect(0, 46, 128, 32, C_BG);
         gfx_fillRect(0, 45, 128, 1, QCOL[(frameNo >> 2) & 3]); gfx_fillRect(0, 78, 128, 1, QCOL[(frameNo >> 2) & 3]);
         gfx_textScaled((128 - w) / 2 + off, 50, s, C_EDGE, 2);
-        const char *nm = ENEMY_NAMES[enemyKind()];
+        char nb[24];
+        snprintf(nb, sizeof nb, "%s%s", enemyTwin() ? "TWIN " : "", ENEMY_NAMES[enemyKind()]);
+        const char *nm = nb;
         gfx_text((128 - gfx_textWidth(nm)) / 2 + off, 68, nm, C_Q0);
     }
     if (banT && state == PLAY) {                                      // the power-up text box
@@ -1045,7 +1106,7 @@ void sim_waitInput();
 void setup() {
     chgame.boot();
 #if CHGAME_DEBUG
-    dbg::begin("CHIX 1.1");
+    dbg::begin("CHIX 1.2");
 #endif
     gfx_begin(GFX_DIV2, GFX_12BPP);
     const uint16_t pal[16] = {
