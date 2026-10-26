@@ -6,7 +6,7 @@
 
 An original arcade game for [CHGame](https://github.com/bateske/CHGame): draw lines out into the open field, close
 them back on a border and claim the ground behind them, while a spinning enemy and its sparks hunt for your open
-line. Twenty-five stages, ten rainy cityscapes, nine power-ups and a psytrance soundtrack on a small FM synth. It is in the
+line. Twenty-five stages, ten rainy cityscapes, ten power-ups and a psytrance soundtrack on a small FM synth. It is in the
 spirit of the territory-claiming arcade classics; every line of code, picture, sprite and tune in this
 repository is original.
 
