@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.1
+
+The three slow songs (the title, aurora and nebula) are rewritten with a groove and a melody, and the whole mix is about 1.4x louder, with a soft limiter on the peaks.
+
 ## 1.2
 
 Twenty more stages (45 in all): five new solids as enemies, then twin pairs that you can blow up by walling one in, a fourth

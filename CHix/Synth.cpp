@@ -18,6 +18,9 @@
 
 namespace {
 
+#ifndef SYN_GAIN
+#define SYN_GAIN 22                                       // 1.375 x: louder, with the soft knee squashing the peaks instead of clipping them
+#endif
 constexpr uint16_t ENV_DIV = SYN_RATE / 122;            // samples between envelope ticks (about 8 ms)
 
 struct Voice { uint16_t ph, mph, inc, minc; uint8_t idx, eff, vol; bool gate; };       // eff: idx plus the sweep
@@ -140,7 +143,8 @@ uint8_t sample() {                                       // runs from flash: the
         sf.ph += sf.inc;
         mix += (sf.ph & 0x8000) ? sf.amp : -sf.amp;
     }
-    if (mix > 90) mix = 90 + ((mix - 90) >> 2); else if (mix < -90) mix = -90 + ((mix + 90) >> 2);   // a soft knee
+    mix = (mix * SYN_GAIN) >> 4;                                          // the master volume (16 = as mixed)
+    if (mix > 96) mix = 96 + ((mix - 96) >> 2); else if (mix < -96) mix = -96 + ((mix + 96) >> 2);   // a soft knee: peaks squash, they do not clip
     return (uint8_t)(128 + (mix > 127 ? 127 : mix < -128 ? -128 : mix));
 }
 

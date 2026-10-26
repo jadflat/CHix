@@ -1106,7 +1106,7 @@ void sim_waitInput();
 void setup() {
     chgame.boot();
 #if CHGAME_DEBUG
-    dbg::begin("CHIX 1.2");
+    dbg::begin("CHIX 1.2.1");
 #endif
     gfx_begin(GFX_DIV2, GFX_12BPP);
     const uint16_t pal[16] = {

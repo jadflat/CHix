@@ -85,7 +85,7 @@ You need the CHGame board package and a CHGame board. From this folder:
   generated headers are checked in, so building needs none of them.
 - The sound is a small software synth (`CHix/Synth.cpp`): a timer interrupt mixes three 2-operator FM voices (a bell
   lead, a pluck bass and a glassy arpeggio) and a drum voice into the piezo as 8 kHz PWM, and the game's effects play
-  on top as a square voice. The nine songs (psychill for the title; stages 1 to 25 cycle aurora, dark psy, goa, full-on and forest, calmest to most frantic; stages 26 to 45 cycle progressive, nebula and hi-tech; the title, aurora and nebula are ambient at 80 BPM) are 16-bar step sequences (`tools/make_music.py`, 1 KB each), each with its own FM sound.
+  on top as a square voice. The nine songs (downtempo dub for the title; stages 1 to 25 cycle aurora, dark psy, goa, full-on and forest, calmest to most frantic; stages 26 to 45 cycle progressive, nebula and hi-tech; the title, aurora and nebula are ambient at 80 BPM) are 16-bar step sequences (`tools/make_music.py`, 1 KB each), each with its own FM sound.
 - Measured on the board (`./cl run --device CHix/tools/scripts/perf.txt out/perf`, `-D CHIX_START_LEVEL=n` for a
   later stage): about 16 ms a frame, 27 ms at worst, for a steady 30 fps (stage 45, with twin tesseracts and four sparks: 18 ms, 26 ms at worst). `GFX_CHUNK_ROWS=1` (in
   `CHix/tools/game.py`) gives back about 500 B of RAM.

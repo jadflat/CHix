@@ -55,6 +55,8 @@ BASS = {
     'offbeat': [N, N, 0, N] * 4,                                    # dark: one note between the kicks
     'swarm': [N, 0, 0, 12] * 4,                                     # forest
     'long': [0, N, N, N, N, N, N, N, 7, N, N, N, N, N, N, N],       # psychill
+    'dub': [0, N, N, 0, N, N, 7, N, 0, N, 3, N, 7, N, 5, N],        # downtempo: a syncopated groove under the half-time kick
+    'pulse': [0, N, N, N, N, N, N, N, 0, N, N, N, 7, N, N, N],      # a slow pulse
 }
 
 
@@ -76,7 +78,22 @@ def drums(style, bars=16):
     for bar in range(bars):
         d = [0] * 16
         intro = bar < 4
-        if style == 'air':
+        if style == 'down':                                    # half-time: kick on 1 and the 'and' of 2, snare on 3
+            d[0] |= 1; d[7] |= 1
+            if bar % 2:
+                d[10] |= 1
+            d[8] |= 2
+            for sx in (4, 12, 15):
+                d[sx] |= 4
+            if bar % 4 == 3:
+                d[6] |= 8
+        elif style == 'air2':                                  # a soft pulse and a hat
+            if bar % 2 == 0:
+                d[0] |= 1
+            d[8] |= 4
+            if bar % 2:
+                d[12] |= 4
+        elif style == 'air':
             if bar % 2 == 0:
                 d[8] |= 4
             if bar % 4 == 3:
@@ -102,7 +119,7 @@ def drums(style, bars=16):
                     for s in range(16):
                         if not d[s]:
                             d[s] |= 4                          # rolling hats on every free step
-        if bar % 8 == 7 and style != 'air':                    # a fill into the next eight bars
+        if bar % 8 == 7 and style not in ('air', 'air2', 'down'):                    # a fill into the next eight bars
             d[12] |= 1; d[13] |= 4; d[14] |= 2; d[15] |= 2
         out.append(d)
     return [x for b in out for x in b]
@@ -116,21 +133,27 @@ def add(name, ms, sweep, inst, lead, bass, delay, dr, fixed=False):
     SONGS.append(dict(name=name, ms=ms, sweep=sweep, inst=inst, lead=lead, bass=bass, delay=delay, drums=dr, fixed=fixed))
 
 
-# ---- 0 psychill: slow bells, C dorian, 100 bpm
-P = {'A': [7, N, N, N, N, N, N, N, 9, N, N, N, N, N, N, N], 'B': [10, N, N, N, 9, N, N, N, 7, N, N, N, 5, N, N, N],
-     'C': [7, N, 9, N, 10, N, N, N, 12, N, N, N, N, N, 10, N], 'D': [5, N, N, N, 7, N, N, N, N, N, 4, N, N, N, N, N]}
-order = ['A', 'B', 'A', 'B', 'C', 'B', 'A', 'D', 'A', 'B', 'C', 'B', 'C', 'D', 'B', 'A']
-lead = lead_stream(72, 'dorian', P, order, [0] * 8)
-add('TITLE', 188, 14, [(1, 30, 1, 6, 100, 1, 50), (1, 20, 3, 4, 110, 1, 70), (2, 26, 3, 2, 52, 3, 0)],
-    lead, bass_stream(72, 'long', [0, 0, 0, 0, -2, -2, 0, 0]), 3, drums('chill'), fixed=True)
+# ---- 0 title: downtempo dub, C dorian, 80 bpm. A hook in eighth notes over a half-time groove
+P = {'A': [7, N, 9, N, 10, N, 9, N, 7, N, N, 5, N, N, 7, N],
+     'B': [9, N, 10, N, 12, N, 10, N, 9, N, 7, N, 5, N, N, N],
+     'C': [12, N, 10, N, 9, N, 7, N, 9, N, 10, N, 12, N, 14, N],
+     'D': [10, N, N, 9, N, N, 7, N, 5, N, 7, N, 9, N, N, N]}
+order = list('ABAD' + 'CBCD' + 'ABAD' + 'CBDA')
+sh = [0, 0, 5, 5, 0, 0, 7, 7]                               # Cm, Fm, Cm, Gm
+lead = lead_stream(72, 'dorian', P, order, sh)
+add('TITLE', 188, 12, [(1, 28, 1, 6, 94, 1, 48), (1, 24, 3, 4, 104, 1, 74), (2, 24, 2, 3, 52, 2, 0)],
+    lead, bass_stream(72, 'dub', sh), 3, drums('down'), fixed=True)
 
-# ---- ambient stage song: F lydian, 80 bpm, long bells and a drone, almost no drums
-P = {'A': [7, N, N, N, 9, N, N, N, 11, N, N, N, N, N, N, N], 'B': [14, N, N, N, N, N, 11, N, N, N, 9, N, N, N, N, N],
-     'C': [9, N, N, N, N, N, 7, N, N, N, 4, N, N, N, N, N], 'D': [11, N, 13, N, N, N, N, N, 14, N, N, N, N, N, N, N]}
+# ---- ambient stage song: F lydian, 80 bpm. Rolling arpeggios over a slow pulse
+P = {'A': [7, N, 9, N, 11, N, 9, N, 8, N, 10, N, 12, N, 10, N],
+     'B': [14, N, 13, N, 11, N, 9, N, 7, N, 9, N, 11, N, N, N],
+     'C': [12, N, 14, N, 15, N, 14, N, 12, N, 11, N, 9, N, N, N],
+     'D': [11, N, 13, N, 14, N, 16, N, 14, N, 13, N, 11, N, N, N]}
 order = list('ABAC' + 'BDAC' + 'ABCD' + 'BADC')
-lead = lead_stream(77, 'lydian', P, order, [0, 0, -3, -3, -5, -5, 0, 0])
-add('AURORA', 188, 10, [(1, 22, 1, 4, 90, 1, 55), (1, 16, 2, 2, 100, 1, 80), (2, 20, 2, 2, 46, 2, 0)],
-    lead, bass_stream(77, 'long', [0, 0, -3, -3, -5, -5, 0, 0]), 3, drums('air'), fixed=True)
+sh = [0, 0, -3, -3, -5, -5, 0, 0]                           # F, Dm, Bb
+lead = lead_stream(65, 'lydian', P, order, sh)
+add('AURORA', 188, 10, [(1, 24, 1, 4, 92, 1, 46), (1, 18, 3, 3, 104, 2, 70), (3, 22, 2, 2, 50, 2, 0)],
+    lead, bass_stream(65, 'pulse', sh), 3, drums('air2'), fixed=True)
 
 # ---- 1 full-on: A phrygian, 145 bpm
 P = {'A': [7, N, 7, N, 8, N, 7, N, 7, N, 10, N, 9, N, 8, N],
@@ -177,13 +200,16 @@ lead = lead_stream(74, 'dorian', P, order, [0, 0, 0, 0, -2, -2, 3, 3])
 add('PROG', 117, 32, [(2, 46, 3, 10, 108, 2, 38), (1, 42, 6, 6, 122, 3, 72), (4, 36, 5, 3, 58, 5, 0)],
     lead, bass_stream(62, 'roll_oct', [0, 0, 0, 0, -2, -2, 3, 3]), 3, drums('full'))
 
-# ---- nebula: ambient, A dorian, 80 bpm
-P = {'A': [9, N, N, N, N, N, N, N, 12, N, N, N, N, N, N, N], 'B': [14, N, N, N, 12, N, N, N, 10, N, N, N, N, N, N, N],
-     'C': [7, N, N, N, N, N, 9, N, N, N, N, N, 12, N, N, N], 'D': [16, N, N, N, N, N, N, N, 14, N, N, N, N, N, 12, N]}
+# ---- nebula: ambient, A dorian, 80 bpm. Slow rolling chords, a long delay
+P = {'A': [0, N, 2, N, 4, N, 7, N, 4, N, 2, N, 0, N, N, N],
+     'B': [2, N, 4, N, 6, N, 9, N, 6, N, 4, N, 2, N, N, N],
+     'C': [7, N, 9, N, 11, N, 14, N, 11, N, 9, N, 7, N, N, N],
+     'D': [4, N, 6, N, 7, N, 9, N, 11, N, 9, N, 7, N, 4, N]}
 order = list('ABCD' + 'ACBD' + 'ABAD' + 'CDBA')
-lead = lead_stream(69, 'dorian', P, order, [0, 0, -2, -2, -4, -4, 0, 0])
-add('NEBULA', 188, 8, [(1, 18, 1, 3, 88, 1, 52), (1, 14, 2, 2, 100, 1, 82), (3, 18, 2, 2, 44, 2, 0)],
-    lead, bass_stream(69, 'long', [0, 0, -2, -2, -4, -4, 0, 0]), 4, drums('air'), fixed=True)
+sh = [0, 0, -2, -2, -4, -4, 0, 0]
+lead = lead_stream(69, 'dorian', P, order, sh)
+add('NEBULA', 188, 8, [(1, 20, 1, 3, 88, 1, 46), (1, 16, 2, 2, 100, 1, 72), (3, 22, 2, 2, 48, 2, 0)],
+    lead, bass_stream(57, 'pulse', sh), 4, drums('air2'), fixed=True)
 
 # ---- hi-tech: F# phrygian, 165 bpm (the last stages)
 P = {'A': [7, N, 7, 8, 7, N, 10, 7, 7, N, 7, 8, 7, 12, 10, 8],
