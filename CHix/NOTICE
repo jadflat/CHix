@@ -6,5 +6,5 @@ and music are original.
 
 Built on CHGame, Copyright 2026 Kevin Bates (bateske), Apache-2.0: the framework is vendored in chgame/ (see chgame/NOTICE and chgame/LICENSE).
 
-The sprites and boss cores were rendered to PNG with the "pixel-art-gen" (Pixel Art Generator) Claude skill from grids drawn for this game;
+The sprites and boss cores were rendered to PNG with the author's own CHGame-tuned "pixel-art-gen" Claude skill (a Pixel Art Generator skill with the CHGame palette and rules) from grids drawn for this game;
 the art itself is original and covered by the MIT licence above.
