@@ -24,7 +24,7 @@ repository is original.
 
 - Walk the border. Push into the open field with A or B to draw a line; reach any border to close it and claim
   the side without the main enemy.
-- Claim the stage's share of the field (70%, rising to 82% by stage 45) to clear it. Bigger claims score more,
+- Claim the stage's share of the field (70% at stage 1, 2 more every stage, then 85% from stage 9 on) to clear it. Bigger claims score more,
   and a slow line is worth double. Claim again within four seconds and the score multiplies, up to x5.
 - The enemy kills you if it touches your open line. A spark kills you if it touches you. From stage 4 a fuse
   burns down your line if you stop drawing for a moment.

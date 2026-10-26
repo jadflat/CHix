@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.3
+
+- Fixed: a stage could be cleared at 100% after claiming only about 60%. If the enemy happened to be standing on the line you closed, the game found no open ground to keep and claimed all of it; it now starts from the nearest open cell (and puts the enemy back in the open).
+- Fixed: the frame rate dipped as the field filled, because every claimed cell drew four picture pixels (about 53 ms a frame at 73% claimed). The picture's detail now steps down as more is claimed (full detail up to 18%, then two pixels, then one a cell), which keeps frames under 30 ms.
+- The share to claim now rises faster: 70% at stage 1, two more points every stage, and 85% from stage 9 on.
+
 ## 1.2.2
 
 The music crossfades between stages: the old song fades out over half a second and the new one fades in, instead of cutting over (and the old song's last notes and drums no longer run into the new stage). Sound effects stay at full level through the fade.

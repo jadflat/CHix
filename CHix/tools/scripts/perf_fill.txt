@@ -1,0 +1,9 @@
+wait 20
+tap A
+wait 100
+perf a_filled
+wait 60
+perf b_filled
+hold LEFT
+wait 30
+perf c_move

@@ -18,6 +18,7 @@
 
 static void blit12(int x, int y, const uint8_t *spr);
 static inline bool enemyTwin();
+static inline int enemyKind();
 static bool freeAt(int ax, int ay);
 
 enum { W = 60, H = 56, OX = 4, OY = 14, };
@@ -89,7 +90,7 @@ static int px, py, startX, startY;
 static bool drawing, slowDraw;
 static int lives, level, score, areaPct, timer, frameNo;
 enum { STAGES = 45 };
-static inline int tgt() { return level <= 25 ? 70 + (level - 1) / 3 : 78 + (level - 25) / 5; }   // the share to claim: 70% rising to 82%
+static inline int tgt() { int t = 68 + 2 * level; return t > 85 ? 85 : t; }   // the share to claim: 70% at stage 1, 2 more a stage, 85% from stage 9 on
 static inline int sparkN() { return level >= 30 ? 4 : level >= 8 ? 3 : 2; }   // a third Spark from stage 8, a fourth from 30
 static uint32_t rng = 12345;
 
@@ -252,6 +253,7 @@ static void resetActors() {
 static void demoFill() {                                        // a build flag for looking at the pictures: most of the field claimed
     for (int y = 6; y < 50; y++) for (int x = 4; x < 56; x++) g[y][x] = x < 30 ? FAST : SLOW;
     markBorders();
+    areaPct = 73;
 }
 #endif
 static void newLevel() { resetField();
@@ -298,40 +300,61 @@ static void snapPlayer() {
 
 // Debug builds: the perf report lists the time of each phase of closing a shape (microseconds a close).
 #define PROBE(i) ((i) ? dbg::prof((i) - 1) : dbg::profStart())
+static uint16_t floodQ[512];
+static void floodFrom(int sx, int sy) {                               // mark the open cells joined to this one
+    static const int8_t D4[4][2] = { {1, 0}, {-1, 0}, {0, 1}, {0, -1} };
+    int head = 0, tail = 0;
+    g[sy][sx] |= MARK;
+    floodQ[tail++] = (sy << 6) | sx;
+    while (head != tail) {
+        int c = floodQ[head];
+        head = (head + 1) & 511;
+        int x = c & 63, y = c >> 6;
+        for (int k = 0; k < 4; k++) {
+            int nx = x + D4[k][0], ny = y + D4[k][1];
+            if (inb(nx, ny) && g[ny][nx] == EMPTY) {
+                g[ny][nx] |= MARK;
+                floodQ[tail] = (ny << 6) | nx;
+                tail = (tail + 1) & 511;
+            }
+        }
+    }
+}
+
+static bool nearEmpty(int &sx, int &sy) {                             // this cell if it is open, else the nearest open one within 4
+    for (int r = 0; r <= 4; r++)
+        for (int dy = -r; dy <= r; dy++)
+            for (int dx = -r; dx <= r; dx++) {
+                int x = sx + dx, y = sy + dy;
+                if ((abs(dx) == r || abs(dy) == r) && inb(x, y) && g[y][x] == EMPTY) { sx = x; sy = y; return true; }
+            }
+    return false;
+}
+
 static void closeTrail() {
     PROBE(0);
     uint8_t v = slowDraw ? SLOW : FAST;
     int gained = trailLen;
     for (int i = 0; i < trailLen; i++) g[trail[i] >> 6][trail[i] & 63] = v;
     trailLen = 0;
-    static uint16_t q[512];
-    static const int8_t D4[4][2] = { {1, 0}, {-1, 0}, {0, 1}, {0, -1} };
-    int sx = qx[0] >> 4, sy = qy[0] >> 4;
-    if (inb(sx, sy) && g[sy][sx] == EMPTY) {
-        int head = 0, tail = 0;
-        g[sy][sx] |= MARK;
-        q[tail++] = (sy << 6) | sx;
-        while (head != tail) {
-            int c = q[head];
-            head = (head + 1) & 511;
-            int x = c & 63, y = c >> 6;
-            for (int k = 0; k < 4; k++) {
-                int nx = x + D4[k][0], ny = y + D4[k][1];
-                if (inb(nx, ny) && g[ny][nx] == EMPTY) {
-                    g[ny][nx] |= MARK;
-                    q[tail] = (ny << 6) | nx;
-                    tail = (tail + 1) & 511;
-                }
-            }
-        }
+    // The ground the enemy is in stays open: flood from it. The enemy may be standing on a cell the new wall just took (the
+    // line it sits on), so start from the nearest open cell; with no open cell near it nothing is claimed rather than everything.
+    int seedX[2] = { -1, -1 }, seedY[2] = { -1, -1 };
+    bool seeded = false;
+    for (int b = 0; b < (enemyKind() == 0 ? 2 : 1); b++) {            // the line enemy has two ends; a solid, or a twin's first body, one
+        int sx = qx[b] >> 4, sy = qy[b] >> 4;
+        if (inb(sx, sy) && (g[sy][sx] & MARK)) { seeded = true; continue; }       // already flooded from the other end
+        if (nearEmpty(sx, sy)) { floodFrom(sx, sy); seedX[b] = sx; seedY[b] = sy; seeded = true; }
     }
     PROBE(1);
     int open = 0;
     for (int y = 1; y < H - 1; y++)
         for (int x = 1; x < W - 1; x++) {
-            if (g[y][x] == EMPTY) { g[y][x] = v; gained++; }
+            if (g[y][x] == EMPTY) { if (seeded) { g[y][x] = v; gained++; } else open++; }
             else if (g[y][x] & MARK) { g[y][x] &= ~MARK; open++; }
         }
+    for (int b = 0; b < 2; b++)                                       // an enemy left inside claimed ground is put back in the open
+        if (seedX[b] >= 0 && inb(qx[b] >> 4, qy[b] >> 4) && claimed(qx[b] >> 4, qy[b] >> 4)) { qx[b] = seedX[b] * 16 + 8; qy[b] = seedY[b] * 16 + 8; }
     PROBE(2);
     markBorders();
     PROBE(3);
@@ -786,6 +809,8 @@ static const uint8_t HUE[12][3] = { {255,60,60}, {255,160,40}, {255,240,60}, {16
 static void drawCells() {
     if (level > 25 && state != TITLE) { const uint8_t *hc = HUE[(frameNo >> 2) % 12]; gfx_setPaletteEntry(7, gfx_rgb(hc[0], hc[1], hc[2])); }   // the lights cycle
     bool cl = state == CLEARED;
+    // The more ground is claimed the more pixels the picture costs (4 us each): full detail up to 18%, then fewer, so a frame stays under 33 ms.
+    const int lod = cl ? 2 : areaPct < 18 ? 0 : areaPct < 40 ? 1 : 2;
     int wipe = cl ? (CLEAR_TIME - timer) * H / 45 : 0;               // the scan that fills what is left
     for (int y = 0; y < H; y++) {
         uint8_t *r0 = gfx_fb + (OY + 2 * y) * GFX_FB_STRIDE + OX / 2;
@@ -802,8 +827,16 @@ static void drawCells() {
                 if (flash & 2) { r0[x] = r1[x] = C_EDGE * 17; continue; }
                 const uint8_t *tn = c == FAST ? TONE_FAST : TONE_SLOW;
                 int qx2 = 2 * x, qy2 = 2 * y;
-                r0[x] = tn[sceneTone(qx2, qy2)] | (tn[sceneTone(qx2 + 1, qy2)] << 4);
-                r1[x] = tn[sceneTone(qx2, qy2 + 1)] | (tn[sceneTone(qx2 + 1, qy2 + 1)] << 4);
+                if (lod == 0) {                                              // every pixel
+                    r0[x] = tn[sceneTone(qx2, qy2)] | (tn[sceneTone(qx2 + 1, qy2)] << 4);
+                    r1[x] = tn[sceneTone(qx2, qy2 + 1)] | (tn[sceneTone(qx2 + 1, qy2 + 1)] << 4);
+                } else if (lod == 1) {                                       // a pixel for each row of the cell
+                    uint8_t a = tn[sceneTone(qx2, qy2)], b = tn[sceneTone(qx2, qy2 + 1)];
+                    r0[x] = a | (a << 4); r1[x] = b | (b << 4);
+                } else {                                                     // one pixel a cell (the windows are whole cells anyway)
+                    uint8_t a = tn[sceneTone(qx2, qy2 + 1)];
+                    r0[x] = r1[x] = a | (a << 4);
+                }
                 continue;
             }
             r0[x] = v0 | (v0 << 4);
@@ -1106,7 +1139,7 @@ void sim_waitInput();
 void setup() {
     chgame.boot();
 #if CHGAME_DEBUG
-    dbg::begin("CHIX 1.2.2");
+    dbg::begin("CHIX 1.2.3");
 #endif
     gfx_begin(GFX_DIV2, GFX_12BPP);
     const uint16_t pal[16] = {
