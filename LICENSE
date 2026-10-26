@@ -1,4 +1,4 @@
-This repository has two parts, each under its own licence:
+This repository has two parts, each under its own licence (plus the credit in THIRD-PARTY.md for the sound output's timer setup, BSD 3-Clause):
 
 1. The game's own code, art and music (below): MIT, by Jadflat.
 2. chgame/: the CHGame framework and tools by Kevin Bates (bateske),

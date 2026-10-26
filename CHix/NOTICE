@@ -8,3 +8,7 @@ Built on CHGame, Copyright 2026 Kevin Bates (bateske), Apache-2.0: the framework
 
 The sprites and boss cores were rendered to PNG with the author's own CHGame-tuned "pixel-art-gen" Claude skill (a Pixel Art Generator skill with the CHGame palette and rules) from grids drawn for this game;
 the art itself is original and covered by the MIT licence above.
+
+The sound output's timer and pin setup (CHix/Synth.cpp) follows chgame-soundtracks (https://github.com/ESPboy-edu/ESPboy_CHCore/tree/main/LIBS/chgame-soundtracks), BSD 3-Clause;
+CHeleste's software mixer (Games/CHeleste/Cheleste in the same repository) showed the approach was practical (no code taken):
+the copyright notices and licence text are in ../THIRD-PARTY.md.

@@ -1,5 +1,6 @@
 // CHix's sound (Synth.h): a small software synth mixed in the sample interrupt and sent to the piezo as PWM.
 //
+// The hardware setup follows chgame-soundtracks (ESPboy-edu/ESPboy_CHCore, LIBS/chgame-soundtracks, BSD 3-Clause: see THIRD-PARTY.md).
 // The hardware is the playbook's PWM-as-DAC recipe: TIM1 CH2 on PB10 is an 8-bit PWM carrier (187.5 kHz), and
 // TIM3's update interrupt writes one sample to it SYN_RATE times a second. The music is a step sequencer over
 // Music.h's streams: three 2-operator FM voices (a modulator at a whole-number ratio of the carrier, with its
