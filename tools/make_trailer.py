@@ -7,7 +7,7 @@ Captures: CHix/tools/scripts/trailer.txt and trailer_split.txt, one run a stage,
 out/trailer/<run>/play.gif. The music is the game's own FM synth (CHix/Synth.cpp) built for the PC with g++
 and rendered at its 8 kHz rate. Needs ffmpeg ($FFMPEG, else on PATH), g++ on PATH, and CHix/sdcard/CHIX.DAT.
 
-Writes docs/CHix-trailer.mp4 (1080x1080), docs/gameplay.gif, docs/shot-*.png (4x), and out/trailer/media/
+Writes docs/CHix-trailer.mp4 (1024x1024), docs/gameplay.gif, docs/shot-*.png (4x), and out/trailer/media/
 CHix-image.png (512x512 cover) and CHix-video.mp4 (640x480, 15 s) for a front end's media folder.
 """
 import os
@@ -158,17 +158,16 @@ def centre(base, im, cx, cy):
 
 
 def render(segments, size, emit):
-    """Frames of a segment list at `size` (1080x1080 or 640x480) to emit(image)."""
+    """Frames of a segment list at `size` (1024x1024 or 640x480) to emit(image)."""
     W, H = size
     big = W >= 1000
-    scale = 6 if big else 3
+    scale = W // 128 if big else 3
     gw = 128 * scale
-    gx, gy = (W - gw) // 2, 130 if big else H - gw - 16
+    gx, gy = (W - gw) // 2, 0 if big else H - gw - 16
     base = background(W, H)
     lg = logo().resize((256, 88) if big else (192, 66), NEAREST)
     if big:
-        frame_box(base, gx, gy, gw, gw)
-        centre(base, lg, W // 2, 66)
+        pass                                                   # the game fills the frame
     else:
         frame_box(base, gx, gy, gw, gw)
         centre(base, lg, W // 2, (gy - 10) // 2)
@@ -188,8 +187,10 @@ def render(segments, size, emit):
                 im = base.copy()
                 im.paste(f.resize((gw, gw), NEAREST), (gx, gy))
                 if big and cap:
-                    for j, line in enumerate(cap.split("\n")):
-                        centre(im, text_image(line, 4, CYAN if j == 0 else GOLD), W // 2, gy + gw + 56 + 44 * j)
+                    t = text_image(cap.replace(chr(10), " "), 4, CYAN)
+                    top = H - t.height - 44
+                    im.paste(Image.blend(im.crop((0, top, W, top + t.height + 24)), Image.new("RGB", (W, t.height + 24), INK), 0.72), (0, top))
+                    centre(im, t, W // 2, top + (t.height + 24) // 2)
                 emit(fade(im, min((i + 1) / 6, (n - i) / 6)))
         else:
             kind, lines, n = grp[0]
@@ -295,7 +296,7 @@ def main():
     wav = music(36)
     readme_gif()
     stills()
-    encode(TRAILER, (1080, 1080), DOCS / "CHix-trailer.mp4", wav)
+    encode(TRAILER, (1024, 1024), DOCS / "CHix-trailer.mp4", wav)
     encode(PREVIEW, (640, 480), OUT / "media" / "CHix-video.mp4", wav, seconds=15)
 
 
