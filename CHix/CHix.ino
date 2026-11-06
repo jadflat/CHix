@@ -997,15 +997,41 @@ RAMFUNC(blitrow) static void blitRow(uint8_t *row, const uint8_t *src, int x, in
     }
 }
 
-static void blit(uint8_t id, int x, int y, uint8_t mode, int ymax) {
-    const SprInfo &sp = SPR[id];
+static const uint8_t *sprBits(uint8_t id) {                       // a sprite's pixels (planned with the frame's read, else its own block)
     const uint8_t *b = nullptr;
     for (uint8_t i = 0; i < nC; i++) if (cId[i] == id && cAt[i] != 0xFF) { b = (const uint8_t *)floodQ + cAt[i] * 8; break; }
-    if (!b) {                                                     // not planned: its block on its own
+    if (!b) {
         b = card::block((CARD_SCENE + theme * CARD_SCENE_STRIDE) / 512 + 14 + sprBlk(id));
-        if (!b) return;
-        b += sp.off & 511;
+        if (b) b += SPR[id].off & 511;
     }
+    return b;
+}
+
+// A 12x12 sprite turned by ang eighths of a turn clockwise (0 = as drawn, pointing up), about its centre (cx, cy): integer inverse mapping.
+static void blitRot(uint8_t id, int cx, int cy, uint8_t ang) {
+    static const int8_t CS[8] = { 64, 45, 0, -45, -64, -45, 0, 45 }, SN[8] = { 0, 45, 64, 45, 0, -45, -64, -45 };
+    const uint8_t *b = sprBits(id);
+    if (!b) return;
+    const int c = CS[ang & 7], s = SN[ang & 7];
+    for (int j = 0; j < 16; j++) {
+        const int yy = cy - 7 + j, Y = 2 * j - 15;
+        if ((unsigned)yy >= 128) continue;
+        for (int i = 0; i < 16; i++) {
+            const int xx = cx - 7 + i, X = 2 * i - 15;
+            const int u = (X * c + Y * s + 768) >> 7, v = (Y * c - X * s + 768) >> 7;
+            if ((unsigned)u >= 12 || (unsigned)v >= 12 || (unsigned)xx >= 128) continue;
+            const uint8_t p = (b[v * 6 + (u >> 1)] >> ((u & 1) * 4)) & 15;
+            if (p == 15) continue;
+            uint8_t *d = gfx_fb + yy * GFX_FB_STRIDE + (xx >> 1);
+            *d = (xx & 1) ? (uint8_t)((*d & 0x0F) | (p << 4)) : (uint8_t)((*d & 0xF0) | p);
+        }
+    }
+}
+
+static void blit(uint8_t id, int x, int y, uint8_t mode, int ymax) {
+    const SprInfo &sp = SPR[id];
+    const uint8_t *b = sprBits(id);
+    if (!b) return;
     const int rb = (sp.w + 1) >> 1;
     for (int dy = 0; dy < sp.h; dy++) {
         int yy = y + dy;
@@ -1044,7 +1070,12 @@ static void drawPlayer() {
 #ifdef CHIX_TRACE
     fprintf(stderr, "SHIP %d %d %d %d\n", frameNo, cx, cy, (int)state);
 #endif
-    blit(drawing && (frameNo & 4) ? SP_SHIP1 : SP_SHIP0, cx - 5, cy - 5);
+    // The ship turns to face the way it goes: an eighth of a turn a frame by the short way (a right angle takes two frames, a U-turn four).
+    static uint8_t ang;
+    const uint8_t want = pdx ? (pdx > 0 ? 2 : 6) : pdy ? (pdy > 0 ? 4 : 0) : ang;
+    if (state != PLAY) ang = want;
+    else if (ang != want) ang = (uint8_t)((((want - ang) & 7) <= 4 ? ang + 1 : ang + 7) & 7);
+    blitRot(drawing && (frameNo & 4) ? SP_SHIP1 : SP_SHIP0, cx + 1, cy + 1, ang);
 }
 
 struct Amb { int8_t sy, dx; uint8_t col, len; };                  // fall speed, drift, colour, streak length
@@ -1285,7 +1316,7 @@ void sim_waitInput();
 void setup() {
     chgame.boot();
 #if CHGAME_DEBUG
-    dbg::begin("CHIX 1.4.6");
+    dbg::begin("CHIX 1.4.7");
 #endif
     gfx_begin(GFX_DIV2, GFX_12BPP);
     const uint16_t pal[16] = {

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.7
+
+- The ship turns to face the way it moves, with a short turning animation (8 angles, integer rotation).
+
 ## 1.4.6
 
 - The public release, with every change since 1.2.3 (1.3.0 to 1.4.5 below; no code change from 1.4.5). In short:
