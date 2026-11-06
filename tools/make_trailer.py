@@ -55,7 +55,6 @@ TRAILER = [
     ("clip", "x08", 110, 240, "BOSSES SHRINK\nTO FIT"),
     ("clip", "s26", 126, 180, "WIREFRAME\nBOSSES"),
     ("clip", "s40", 126, 176, "TWIN\nBOSSES"),
-    ("card", ["GBA-QUALITY ART", "FROM THE SD CARD"], 58),
     ("clip", "f07", 140, 190, "RAINY NEON\nCITYSCAPES"),
     ("clip", "f31", 140, 190, "RAINY NEON\nCITYSCAPES"),
     ("clip", "f45", 126, 172, "RAINY NEON\nCITYSCAPES"),
