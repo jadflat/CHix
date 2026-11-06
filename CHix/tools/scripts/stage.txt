@@ -1,0 +1,9 @@
+# One stage's look (run with -D CHIX_DEMO_FILL -D CHIX_START_LEVEL=N): the picture mostly claimed, the HUD, ship, sparks and enemy over it.
+wait 20
+tap A
+wait 70
+hold LEFT
+wait 12
+release
+wait 4
+snap stage

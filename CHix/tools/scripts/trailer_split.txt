@@ -1,0 +1,20 @@
+# Trailer footage: cut off the right of the field with a fast line, then the left with a slow one, so the boss
+# shrinks to fit the ground it has left (every frame recorded, 30 fps). Run once a stage, e.g.
+#   ./cl run --card CHix/sdcard/CHIX.DAT CHix/tools/scripts/trailer_split.txt out/trailer/x08 -D CHIX_START_LEVEL=8
+wait 10
+tap A
+wait 80
+rec start 1
+hold RIGHT
+wait 30
+hold UP+A
+wait 62
+release
+wait 20
+hold LEFT
+wait 70
+hold UP+A
+wait 62
+release
+wait 60
+rec stop play

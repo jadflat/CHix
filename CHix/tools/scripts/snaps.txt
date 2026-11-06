@@ -1,0 +1,15 @@
+# Stage pictures: split the field twice, then snap (run with -D CHIX_START_LEVEL=1, 5, 9 ...).
+wait 10
+tap A
+wait 80
+hold UP+A
+wait 62
+release
+wait 10
+hold LEFT
+wait 25
+hold UP+B
+wait 62
+release
+wait 10
+snap shot

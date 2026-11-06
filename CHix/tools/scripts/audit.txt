@@ -1,0 +1,13 @@
+# Frame-by-frame look at play: a border walk, a turn into a fast line, the close.
+wait 20
+tap A
+wait 50
+hold LEFT
+wait 40
+hold UP+A
+gif 01_turn 24 1
+wait 16
+hold LEFT+A
+gif 02_close 24 1
+release
+gif 03_after 16 1

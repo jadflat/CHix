@@ -1,0 +1,7 @@
+# Pictures of a stage with most of the field claimed (run with -D CHIX_DEMO_FILL=1 -D CHIX_START_LEVEL=n).
+wait 10
+tap A
+wait 70
+snap look
+wait 40
+snap look2

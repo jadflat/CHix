@@ -1,0 +1,38 @@
+# Where is the 61.7 ms frame in perf.txt's first_claim (board only: the simulator shows none)?
+# The same moves as perf.txt with a perf line after each step.
+# Board: tools/game.py DEFINES += "CHIX_SLIM", "CHIX_START_LEVEL=8"; rm -rf CHix/build; then
+#   ./cl run --device CHix/tools/scripts/perf_claim_trace.txt out/claim_trace
+# and put game.py back. (The profiler, CHGAME_PROFILE=1, would give each phase of closeTrail, but its counters
+# need 12 B more RAM than the debug build has.)
+wait 20
+perf title
+tap A
+perf press_A
+wait 5
+perf start_5
+wait 75
+perf start_80
+hold UP+A
+wait 20
+perf up
+hold RIGHT+A
+wait 18
+perf right
+hold DOWN+A
+wait 20
+perf down_20
+wait 4
+perf down_24
+wait 4
+perf down_28
+wait 1
+perf down_29
+wait 1
+perf down_30
+release
+wait 1
+perf after_1
+wait 4
+perf after_5
+wait 15
+perf after_20

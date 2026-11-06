@@ -1,0 +1,45 @@
+# Trailer footage: the title, the READY screen, then a run of claims, every frame recorded (30 fps).
+# Run it once a stage, each into its own out dir, e.g.
+#   ./cl run --card CHix/sdcard/CHIX.DAT CHix/tools/scripts/trailer.txt out/trailer/s01 -D CHIX_START_LEVEL=1
+# and for a stage that clears on the first claim (the picture mostly painted, then the clear wipe):
+#   ./cl run --card CHix/sdcard/CHIX.DAT CHix/tools/scripts/trailer.txt out/trailer/f07 -D CHIX_DEMO_FILL -D CHIX_START_LEVEL=7
+# tools/make_trailer.py cuts the clips out of the recordings (out/trailer/*/play.gif).
+wait 10
+rec start 1
+wait 80
+tap A
+wait 60
+# a fast line up and across: the first claim
+hold LEFT
+wait 20
+hold UP+A
+wait 24
+hold LEFT+A
+wait 12
+release
+wait 30
+# along the border, then a second fast claim from the right
+hold RIGHT
+wait 11
+hold DOWN
+wait 25
+hold RIGHT
+wait 40
+hold UP+A
+wait 26
+hold RIGHT+A
+wait 11
+release
+wait 30
+# a slow (gold) line across the middle
+hold LEFT
+wait 30
+hold UP+B
+wait 30
+hold LEFT+B
+wait 30
+hold DOWN+B
+wait 40
+release
+wait 40
+rec stop play

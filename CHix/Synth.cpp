@@ -38,7 +38,9 @@ const SongHdr *cur = nullptr;
 const Inst *ins = SONGS[0].inst;                        // the instruments of the song playing (or the last one, for the release)
 uint8_t sweepNow = 0;
 int8_t curId = -1, pendingId = -2;                       // the song playing, and the one fading in after it (-2: none)
-uint8_t fade = 255;                                      // the music's master level
+uint8_t fade = 255;                                      // the crossfade's level
+uint8_t level = 255, mlvl = 255;                         // the song's own level (Music.h, evens out the songs) and fade x level
+uint8_t pass = 0;                                        // every second time through the song, the echo and the sweep change
 int8_t fadeDir = 0;                                      // -1 fading out, +1 fading in
 uint8_t pos = 0;                                        // the step in the song, 0-255
 uint16_t stepCnt = 0, stepLen = 0, envCnt = 0;
@@ -78,19 +80,21 @@ void startSong(int song) {
     stepLen = (uint16_t)(cur->stepMs * SYN_RATE / 1000);
     stepCnt = 1;
     pos = 0;
+    pass = 0;
+    level = cur->level;
 }
 
 void nextStep() {
     const uint8_t *s[2] = { cur->lead, cur->bass };
     for (int i = 0; i < 3; i++) {
-        const uint8_t b = i == 2 ? cur->lead[(uint8_t)(pos - cur->delay)] : s[i][pos];      // the arp is the lead, delayed
+        const uint8_t b = i == 2 ? cur->lead[(uint8_t)(pos - cur->delay - pass)] : s[i][pos];   // the arp is the lead, delayed
         if (b == 0) v[i].gate = false;
         else if (b > 1) noteOn(i, b);
     }
     if (cur->drums[pos]) drumOn(cur->drums[pos]);
     const uint8_t t = pos & 63, tri = t < 32 ? t : 63 - t;                   // four bars: the sweep opens and closes
-    sweepNow = (uint8_t)((tri * cur->sweep) >> 5);
-    pos++;
+    sweepNow = (uint8_t)(((pass ? 32 - tri : tri) * cur->sweep) >> 5);       // ... and the other way round on the second pass
+    if (++pos == 0) pass ^= 2;                                               // the second pass echoes the lead two steps later
 }
 
 void sfxStep() {
@@ -108,11 +112,12 @@ void envTick() {
         if (fade > 4) fade -= 4;
         else {
             fade = 0;
-            if (pendingId != -2) { startSong(pendingId); pendingId = -2; fadeDir = cur ? 1 : 0; } else fadeDir = 0;
+            if (pendingId != -2) { startSong(pendingId); pendingId = -2; fadeDir = cur ? 1 : 0; if (cur) fade = 96; } else fadeDir = 0;
         }
-    } else if (fadeDir > 0) {
-        if (fade < 251) fade += 4; else { fade = 255; fadeDir = 0; }
+    } else if (fadeDir > 0) {                                                 // in faster than out, from a third: the new song's first beat is heard
+        if (fade < 247) fade += 8; else { fade = 255; fadeDir = 0; }
     }
+    mlvl = (uint8_t)((fade * level) >> 8);
     for (int i = 0; i < 3; i++) {
         Voice &c = v[i];
         const Inst &in = ins[i];
@@ -164,7 +169,7 @@ uint8_t sample() {                                       // runs from flash: the
             mix += (SINE[dr.ph >> 8] * dr.vol) >> 8;
         }
     }
-    if (fade < 255) mix = (mix * fade) >> 8;                           // the crossfade (the effects stay at full level)
+    mix = (mix * mlvl) >> 8;                                           // the song's level and the crossfade (the effects stay at full level)
     if (sf.amp) {
         sf.ph += sf.inc;
         mix += (sf.ph & 0x8000) ? sf.amp : -sf.amp;

@@ -1,0 +1,5 @@
+# One full-screen state (run with -D CHIX_TEST=1 game over, 2 win, 3 level clear).
+wait 10
+tap A
+wait 1
+snap state

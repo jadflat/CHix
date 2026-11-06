@@ -1,0 +1,10 @@
+# The full-screen pictures: the title, then the pause menu (run with -D CHIX_TEST=1/2/3 for game over, win, level clear).
+wait 20
+snap title
+tap A
+wait 60
+tap START
+wait 5
+snap pause
+tap START
+wait 3

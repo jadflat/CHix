@@ -1,0 +1,34 @@
+{
+ "device": {
+  "date": "2026-11-06",
+  "script": "perf.txt",
+  "budget_ms": 33.3,
+  "extra": [],
+  "defines": [
+   "GFX_CHUNK_ROWS=1"
+  ],
+  "segments": [
+   {
+    "label": "first_claim",
+    "avg": 15.982,
+    "max": 17.779,
+    "frames": 193,
+    "stk": 736
+   },
+   {
+    "label": "second_claim",
+    "avg": 15.922,
+    "max": 16.348,
+    "frames": 106,
+    "stk": 736
+   },
+   {
+    "label": "third_claim",
+    "avg": 16.221,
+    "max": 17.729,
+    "frames": 105,
+    "stk": 736
+   }
+  ]
+ }
+}

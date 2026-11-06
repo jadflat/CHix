@@ -2,3 +2,7 @@ out/
 build/
 __pycache__/
 *.pyc
+# working notes and the simulator's copy of the card file (dist/CHIX.DAT is the released one)
+docs/UPGRADE-PLAN.md
+docs/ROUND1-PAINT-BRIEF.md
+CHix/sdcard/

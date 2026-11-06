@@ -1,0 +1,21 @@
+# Short taps: each one-frame press of a direction should move the ship exactly one cell (2 px), never zero.
+wait 20
+tap A
+wait 60
+tap LEFT 1
+wait 1
+tap LEFT 1
+wait 1
+tap LEFT 1
+wait 4
+tap RIGHT 1
+wait 4
+hold LEFT
+wait 9
+release
+wait 6
+hold LEFT+B
+wait 7
+release
+wait 10
+snap 01_taps

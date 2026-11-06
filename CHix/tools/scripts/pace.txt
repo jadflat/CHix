@@ -1,0 +1,43 @@
+# The 1.3.2 pace: walk the border, turn, draw fast and slow, close lines, pause (-D CHIX_TRACE logs the ship's pixel each frame).
+wait 20
+tap A
+wait 60
+hold UP
+wait 6
+hold LEFT
+wait 56
+hold RIGHT
+wait 6
+hold LEFT
+wait 6
+hold UP+A
+wait 20
+gif 01_fast 24
+hold LEFT+A
+wait 20
+release
+wait 8
+snap 02_claim
+hold UP
+wait 30
+hold UP+B
+wait 2
+hold RIGHT+B
+wait 40
+hold UP+B
+wait 20
+hold LEFT+B
+wait 60
+release
+wait 8
+snap 03_slow
+tap START
+wait 10
+snap 04_pause
+tap START
+wait 10
+hold UP
+wait 40
+release
+wait 10
+snap 05_end
