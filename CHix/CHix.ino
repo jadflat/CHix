@@ -53,7 +53,7 @@ static uint8_t base[16][3];                                    // the scene's pa
 static void applyTheme(int t) { theme = t; palFor = -1; }
 
 
-static int hiScore, nextLife = 10000;
+static int hiScore, nextLife = 1500000;
 static bool won;
 static int16_t fuse = -1;                       // the fuse burning down your open line (-1: none)
 static uint8_t stallT;
@@ -85,7 +85,7 @@ static Anim an[3];
 static void anim(uint8_t k, int x, int y) { static const uint8_t LEN[3] = { 12, 16, 18 }; an[k].t = LEN[k]; an[k].x = (int16_t)x; an[k].y = (int16_t)y; }
 static uint8_t combo, comboT;                                   // claims within four seconds of each other multiply the score
 static uint8_t closing;                                         // a shape was closed: 2 closeClaim() is due next frame, 1 closeFinish()
-static uint8_t ringT, ringCol, hitT, popT, readyT, respawnT, shakeT;   // respawnT: the closing circle after a death
+static uint8_t ringT, ringCol, hitT, popT, readyT, respawnT, shakeT, invT;   // respawnT: the closing circle after a death; invT: invincible frames after it
 static int16_t ringX, ringY, popX, popY;
 static const int8_t COS24[24] = { 64, 62, 55, 45, 32, 17, 0, -17, -32, -45, -55, -62, -64, -62, -55, -45, -32, -17, 0, 17, 32, 45, 55, 62 };
 enum { CLEAR_TIME = 140 };                     // the level-clear sequence, in frames
@@ -175,9 +175,12 @@ static void placeSpark(int i) {                // on a border cell off the playe
         int x = rnd(W), y = rnd(H);
         if (isBorder(x, y) && x != px && y != py && abs(x - px) + abs(y - py) >= 16) { sp[i].x = x; sp[i].y = y; goto done; }
     }
-    for (int y = 0; y < H; y++)
-        for (int x = 0; x < W; x++)
-            if (isBorder(x, y)) { sp[i].x = x; sp[i].y = y; goto done; }
+    {                                            // (none found: the border cell farthest from the player)
+        int best = -1;
+        for (int y = 0; y < H; y++)
+            for (int x = 0; x < W; x++)
+                if (isBorder(x, y) && abs(x - px) + abs(y - py) > best) { best = abs(x - px) + abs(y - py); sp[i].x = x; sp[i].y = y; }
+    }
 done:
     for (int k = 0; k < 3; k++) { sh[i][k][0] = sp[i].x; sh[i][k][1] = sp[i].y; }
 }
@@ -254,7 +257,7 @@ static void newLevel() { resetField();
 #ifndef CHIX_START_LEVEL
 #define CHIX_START_LEVEL 1
 #endif
-static void newGame() { won = false; playSfx(S_START); nextLife = 10000; lives = 3; level = CHIX_START_LEVEL; score = 0; newLevel(); state = PLAY; won = false;
+static void newGame() { won = false; playSfx(S_START); nextLife = 1500000; lives = 3; level = CHIX_START_LEVEL; score = 0; newLevel(); state = PLAY; won = false;
 #ifdef CHIX_TEST                                              // (simulator screenshots: 1 over, 2 won, 3 clear at 60)
     if (CHIX_TEST == 1 || CHIX_TEST == 2) { state = OVER; won = CHIX_TEST == 2; timer = 30; }
     if (CHIX_TEST == 3) { state = CLEARED; timer = 60; areaPct = 72; clearBonus = 5000; }
@@ -401,7 +404,7 @@ static void closeFinish() {
     combo = (uint8_t)cm; comboT = 240;
     const int pts = gained * (slowDraw ? 20 : 10) * (puT[PU_X2] ? 2 : 1) * cm;
     score += pts;
-    if (score >= nextLife) { nextLife += 10000; if (lives < 6) lives++; playSfx(S_LIFE); }
+    if (score >= nextLife) { nextLife += 1500000; if (lives < 6) lives++; playSfx(S_LIFE); }
     else playSfx(gained > 150 || cm >= 3 ? S_BIG : S_CLAIM);
     areaPct = 100 - openN * 100 / ((W - 2) * (H - 2));
     for (int i = 0; i < sparkN(); i++) {                 // a Spark the fill swallowed starts again on a border
@@ -410,10 +413,7 @@ static void closeFinish() {
         anim(1, OX + 2 * sp[i].x, OY + 2 * sp[i].y);
         burst(OX + 2 * sp[i].x, OY + 2 * sp[i].y, 6, C_EDGE);
         score += 1000; playSfx(S_ZAP);
-        bool found = false;
-        for (int y = 0; y < H && !found; y++)
-            for (int x = 0; x < W && !found; x++)
-                if (isBorder(x, y)) { sp[i].x = x; sp[i].y = y; found = true; }
+        placeSpark(i);                                   // (1.5.4: away from the player, not the first border cell)
         for (int k = 0; k < 3; k++) { sh[i][k][0] = sp[i].x; sh[i][k][1] = sp[i].y; }   // no afterglow back where it was
     }
     if (enemyTwin()) {                                // a twin caught in the claimed ground blows up: it comes back beside the other
@@ -729,7 +729,7 @@ static void update() {
             if (--lives <= 0) { state = OVER; timer = 30; playSfx(S_OVER); synth::music(-1); saveProgress(false); }
             else {
                 int sx = startX, sy = startY;
-                resetActors(false); px = startX = sx; py = startY = sy; snapPlayer(); state = PLAY; respawnT = 36; playSfx(S_ZAP);
+                resetActors(false); px = startX = sx; py = startY = sy; snapPlayer(); state = PLAY; respawnT = 36; invT = 60; playSfx(S_ZAP);   // then a second and a half (60 frames at 40 fps) untouchable
                 for (int i = 0; i < 4; i++)                          // a Spark back at its start must be on a border and not on top of the player
                     if (!isBorder(sp[i].x, sp[i].y) || abs(sp[i].x - px) + abs(sp[i].y - py) < 16) placeSpark(i);
             }
@@ -752,6 +752,7 @@ static void update() {
     if (closing == 2) { closeClaim(); return; }
     if (closing) { closeFinish(); if (state != PLAY) return; }
     if (respawnT) { respawnT--; return; }                       // frozen while the circle closes in
+    if (invT) invT--;
     bool a = chgame.pressed(A_BUTTON), b = chgame.pressed(B_BUTTON);
     int dx = (int)chgame.pressed(RIGHT_BUTTON) - (int)chgame.pressed(LEFT_BUTTON);
     int dy = (int)chgame.pressed(DOWN_BUTTON) - (int)chgame.pressed(UP_BUTTON);
@@ -803,7 +804,7 @@ static void update() {
         if (!(frameNo & 3)) pu.life--;
         if ((px == pu.x && py == pu.y) || claimed(pu.x, pu.y)) collect();
     } else if (++puWait > 400 + level * 12) { puWait = 0; spawnPickup(); }   // fewer pick-ups as stages go
-    bool frozen = puT[PU_FREEZE] != 0, shield = puT[PU_SHIELD] != 0;
+    bool frozen = puT[PU_FREEZE] != 0, shield = puT[PU_SHIELD] != 0 || invT;
     bool tick = !frozen && (!puT[PU_SLOW] || (frameNo & 1));
     if (tick) { moveCore(); rot++; sizeBoss(); }
     bool sMove = false;                                 // the Sparks: a quarter cell a frame, half from stage 6, three quarters from 36
@@ -1076,6 +1077,7 @@ static void drawPlayer() {
     const uint8_t want = pdx ? (pdx > 0 ? 2 : 6) : pdy ? (pdy > 0 ? 4 : 0) : ang;
     if (state != PLAY) ang = want;
     else if (ang != want) ang = (uint8_t)((((want - ang) & 7) <= 4 ? ang + 1 : ang + 7) & 7);
+    if (invT && state == PLAY && (frameNo & 2)) return;       // blinks while invincible
     blitRot(drawing && (frameNo & 4) ? SP_SHIP1 : SP_SHIP0, cx + 1, cy + 1, ang);
 }
 
@@ -1348,7 +1350,7 @@ static bool chixHook(char cmd, const char *a) {
 void setup() {
     chgame.boot();
 #if CHGAME_DEBUG
-    dbg::begin("CHIX 1.5.1");
+    dbg::begin("CHIX 1.5.5");
 #endif
     gfx_begin(GFX_DIV2, GFX_12BPP);
     const uint16_t pal[16] = {

@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.5.5
+
+- Invincibility after a lost life tripled: a second and a half.
+
+## 1.5.4
+
+- Half a second of invincibility after a lost life (the ship blinks).
+- A Spark caught in claimed ground comes back on a border away from the ship, not on the first border cell (which could be under it).
+
+## 1.5.3
+
+- Extra life every 1,500,000 points instead of 10,000: the old rate gave several lives each stage, so the count looked restocked at every stage.
+
 ## 1.5.1
 
 - The SD save mirror is written on the title, pause or game-over screen, not during play: it hitched the start of each level on the MiSTer.
