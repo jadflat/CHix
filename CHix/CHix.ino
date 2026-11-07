@@ -1348,7 +1348,7 @@ static bool chixHook(char cmd, const char *a) {
 void setup() {
     chgame.boot();
 #if CHGAME_DEBUG
-    dbg::begin("CHIX 1.5.0");
+    dbg::begin("CHIX 1.5.1");
 #endif
     gfx_begin(GFX_DIV2, GFX_12BPP);
     const uint16_t pal[16] = {
@@ -1394,7 +1394,7 @@ void loop() {
         if (hasSave) titleSel = 0;
         cardDue = 20;
     }
-    if (cardDue && !--cardDue) {                                 // 20 frames after the last change: the SD card's copy (not in the same frame as the flash write)
+    if (cardDue && (state == TITLE || state == OVER || state == PAUSED) && !--cardDue) {   // (1.5.1: only on a calm screen; the write hitched level starts on the MiSTer)                                 // 20 frames after the last change: the SD card's copy (not in the same frame as the flash write)
         uint8_t m[sizeof sv + 1];
         memcpy(m, &sv, sizeof sv);
         m[sizeof sv] = saveFlag ? 1 : 0;

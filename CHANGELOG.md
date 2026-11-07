@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.1
+
+- The SD save mirror is written on the title, pause or game-over screen, not during play: it hitched the start of each level on the MiSTer.
+
 ## 1.5.0
 
 - 40 frames a second instead of 30: the game runs a third faster (ship, Sparks, bosses and timers all move at the quicker pace), worst board frame stays under the 25 ms the new rate allows.
