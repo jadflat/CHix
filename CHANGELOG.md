@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.0
+
+- 40 frames a second instead of 30: the game runs a third faster (ship, Sparks, bosses and timers all move at the quicker pace), worst board frame stays under the 25 ms the new rate allows.
+- The save is also written to the last two blocks of `CHIX.DAT` on the SD card; a save lost from flash (a re-flash, an update) is restored from the card at the next start. The DAT is 1 KB bigger: copy the new `CHIX.DAT` to the card.
+
 ## 1.4.7
 
 - The ship turns to face the way it moves, with a short turning animation (8 angles, integer rotation).

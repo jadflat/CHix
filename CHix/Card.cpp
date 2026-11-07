@@ -4,6 +4,12 @@
 #include <CHGame.h>
 #include <Fat.h>
 #include <SdSpi.h>
+#ifndef CHSIM
+#include <Arduino.h>                                // SPI1, GPIOx for the save mirror's block write (below)
+#else
+#include <stdio.h>
+#include <stdlib.h>
+#endif
 #include "Card.h"
 #include "CardIndex.h"
 
@@ -13,6 +19,7 @@ static uint16_t tag = 0xffff;                     // the block now in the scratc
 static fat::Run runs[4];
 static uint8_t nRuns;
 static bool open_;
+static bool noWrite;                              // a save-mirror write failed: no more tries until the card is opened again
 
 // CHIX.DAT's place on the card, found without CHSd's general FAT code (only its block reads): the first FAT16 or FAT32
 // volume (at LBA 0, or the MBR's first partition), the file in its root, in up to four runs. A card that is not like
@@ -65,14 +72,19 @@ static uint8_t findDat(uint8_t *b) {
     }
     return 0;
 }
+__attribute__((noinline)) static uint32_t lbaOf(uint32_t k) {          // the card block of the file's block k (0: none; the file is never at block 0)
+    for (uint8_t i = 0; i < nRuns; i++) { if (k < runs[i].blocks) return runs[i].lba + k; k -= runs[i].blocks; }
+    return 0;
+}
 static bool readBlk(uint32_t k, uint8_t *dst) {
-    for (uint8_t i = 0; i < nRuns; i++) { if (k < runs[i].blocks) return sd::read(runs[i].lba + k, dst); k -= runs[i].blocks; }
-    return false;
+    const uint32_t lba = lbaOf(k);
+    return lba && sd::read(lba, dst);
 }
 
 bool open() {
     uint8_t *b = gfx_chunkScratch();
     tag = 0xffff;
+    noWrite = false;
     nRuns = findDat(b);
     open_ = nRuns && readBlk(0, b) && !memcmp(b, "CHIXCARD", 8) && !memcmp(b + 8, &CARD_HASH, 4);
     return open_;
@@ -103,6 +115,107 @@ const uint8_t *block(uint32_t k) {
         tag = (uint16_t)k;
     }
     return b;
+}
+
+// ---- writes: the library's driver only reads, so the save mirror's blocks are written here: a single-block write (CMD24) on the same SPI1
+// set-up as SdSpi.cpp (HypeRunner's clean-room driver, MIT; the helpers below are cut down from it). It touches only a block inside the file's
+// own cluster runs, and only one that still holds the 0xFF fill or an earlier record.
+#ifdef CHSIM
+// the simulator's card is read-only (CHSd/host/sd_host.cpp): with $CHIX_CARDW set the block goes into the file $CHSD_CARD names
+// (a plain file: the DAT itself), for the tests; otherwise the write is refused
+static bool writeBlk(uint32_t k, const uint8_t *src) {
+    const char *path = getenv("CHIX_CARDW") ? getenv("CHSD_CARD") : nullptr;
+    FILE *f = path ? fopen(path, "r+b") : nullptr;
+    const bool ok = f && !fseek(f, (long)k * 512, SEEK_SET) && fwrite(src, 1, 512, f) == 512;
+    if (f) fclose(f);
+    return ok;
+}
+#else
+static const uint32_t SPE = 1u << 6, RXNE = 1u << 0, BSY = 1u << 7;
+__attribute__((noinline)) static uint8_t xfer(uint8_t b) {
+    SPI1->DATAR = b;
+    while (!(SPI1->STATR & RXNE)) {}
+    return (uint8_t)SPI1->DATAR;
+}
+__attribute__((noinline)) static void spiSet(uint32_t c1) {
+    while (SPI1->STATR & BSY) {}
+    SPI1->CTLR1 = (uint16_t)(c1 & ~SPE);
+    SPI1->CTLR1 = (uint16_t)c1;
+}
+__attribute__((noinline)) static uint8_t cmd(uint8_t c, uint32_t arg) {       // as SdSpi.cpp's: the CRC is off since sd::init()
+    xfer(0xFF);
+    xfer((uint8_t)(0x40 | c));
+    for (int sh = 24; sh >= 0; sh -= 8) xfer((uint8_t)(arg >> sh));
+    xfer(0x95);
+    uint8_t r;
+    uint32_t k = 9;
+    do r = xfer(0xFF); while ((r & 0x80) && --k);
+    return r;
+}
+static bool writeBlk(uint32_t k, const uint8_t *src) {
+    const uint32_t lba = lbaOf(k);
+    if (!lba) return false;
+    GPIOA->BSHR = 1u << 4;                          // SdSpi.cpp's claim(): the panel deselected, SPI1 mode 0 at 12 MHz, the card selected
+    const uint16_t lcdCtlr1 = (uint16_t)SPI1->CTLR1;
+    spiSet((1u << 2) | (1u << 8) | (1u << 9) | SPE | (1u << 3));
+    (void)SPI1->DATAR;
+    (void)SPI1->STATR;
+    GPIOB->BCR = 1u << 11;
+    bool ok = !cmd(58, 0);                // READ_OCR: bit 30 = block addressing, as sd::init() reads it
+    if (ok) {
+        uint32_t ocr = 0;
+        for (int i = 0; i < 4; i++) ocr = (ocr << 8) | xfer(0xFF);
+        ok = !cmd(24, (ocr >> 30 & 1) ? lba : lba << 9);
+    }
+    if (ok) {
+        for (int i = -1; i < 514; i++) xfer(i < 0 ? 0xFE : i < 512 ? src[i] : 0xFF);   // the token, the data, the CRC (unchecked)
+        ok = (xfer(0xFF) & 0x1F) == 0x05;            // "data accepted"; the card is busy programming until the read-back's wait(false) sees it done (SdSpi.cpp, 1 s at most)
+    }
+    GPIOB->BSHR = 1u << 11;                         // SdSpi.cpp's release()
+    xfer(0xFF);
+    spiSet(lcdCtlr1);
+    return ok;
+}
+#endif
+
+// ---- the save mirror: the two blocks after CARD_SET hold the whole save (SaveData + its flag) as two alternating records, each with a
+// generation and a checksum, so a torn write leaves the other one; getSave() restores a save the flash page lost. A block: gen (4, LE),
+// 'S', n, n payload bytes, 2 checksum bytes, the 0xFF fill. A block is only written if it holds the fill or a record (the file's own).
+static uint32_t gen_; static uint8_t next_;
+static uint16_t sum(const uint8_t *r, uint8_t n) { uint16_t s = 0; for (uint8_t i = 0; i < n + 6; i++) s = (uint16_t)(s * 31 + r[i] + 1); return s; }
+static bool good(const uint8_t *r, uint8_t n) { return r[4] == 'S' && r[5] == n && sum(r, n) == (uint16_t)(r[6 + n] | r[7 + n] << 8); }
+static const uint32_t SAVE0 = CARD_SET >> 9;
+
+bool getSave(uint8_t *dst, uint8_t n) {             // the newest good record's n bytes into dst; false: none (or no card)
+    bool got = false;
+    gen_ = 0; next_ = 0;
+    for (uint8_t k = 0; open_ && k < 2; k++) {
+        const uint8_t *r = gfx_chunkScratch();
+        tag = 0xffff;
+        if (!readBlk(SAVE0 + k, gfx_chunkScratch()) || !good(r, n)) continue;
+        const uint32_t g = r[0] | r[1] << 8 | (uint32_t)r[2] << 16 | (uint32_t)r[3] << 24;
+        if (!got || g > gen_) { gen_ = g; next_ = k ^ 1; memcpy(dst, r + 6, n); got = true; }
+    }
+    return got;
+}
+
+__attribute__((noinline)) bool putSave(const uint8_t *p, uint8_t n) {   // n <= 64; after gfx_wait(), before the flush; false: not kept (silently: the flash has it)
+    if (!open_ || noWrite) return false;
+    uint8_t *b = gfx_chunkScratch(), r[72];
+    const uint32_t blk = SAVE0 + next_;
+    tag = 0xffff;
+    bool ok = readBlk(blk, b) && (b[4] == 'S' || (b[0] & b[1] & b[2] & b[3]) == 0xFF);
+    if (ok) {
+        const uint32_t g = ++gen_;
+        for (uint8_t i = 0; i < 4; i++) r[i] = (uint8_t)(g >> 8 * i);
+        r[4] = 'S'; r[5] = n; memcpy(r + 6, p, n);
+        const uint16_t s = sum(r, n);
+        r[6 + n] = (uint8_t)s; r[7 + n] = (uint8_t)(s >> 8);
+        memset(b, 0xFF, 512); memcpy(b, r, n + 8);
+        ok = writeBlk(blk, b) && readBlk(blk, b) && !memcmp(b, r, n + 8);
+    }
+    if (ok) next_ ^= 1; else { noWrite = true; open_ = sd::init(); }
+    return ok;
 }
 
 }  // namespace card

@@ -100,8 +100,8 @@ rebuilds it from `tools/paint/` (and rewrites `CHix/CardIndex.h`; rebuild the ga
   lead, a pluck bass and a glassy arpeggio) and a drum voice into the piezo as 8 kHz PWM, and the game's effects play
   on top as a square voice. The nine songs (downtempo dub for the title; stages 1 to 25 cycle aurora, dark psy, goa, full-on and forest, calmest to most frantic; stages 26 to 45 cycle progressive, nebula and hi-tech; the title, aurora and nebula are ambient at 80 BPM) are 16-bar step sequences (`tools/make_music.py`, 1 KB each), each with its own FM sound.
 - Measured on the board (`./cl run --device CHix/tools/scripts/perf.txt out/perf`, `-D CHIX_START_LEVEL=n` for a
-  later stage, `CHIX.DAT` on the card): about 16 ms a frame, 17.8 ms at worst, for a steady 30 fps (stage 45, with twin
-  tesseracts and four sparks: about 19.5 ms, 23.8 ms at worst). `GFX_CHUNK_ROWS=1` (in
+  later stage, `CHIX.DAT` on the card): about 16 ms a frame, 17.8 ms at worst, (stage 45, with twin
+  tesseracts and four sparks: about 19.5 ms, 23.8 ms at worst). Since 1.5.0 the game runs at 40 fps, which allows 25 ms a frame. `GFX_CHUNK_ROWS=1` (in
   `CHix/tools/game.py`) gives back about 500 B of RAM.
 - Budgets: the image must stay at or below 50,432 B so both save pages survive, and static RAM is nearly full.
 

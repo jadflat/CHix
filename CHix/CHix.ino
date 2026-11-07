@@ -669,6 +669,7 @@ struct SaveData { int32_t hi, score, nextLife; uint8_t level, lives; };
 static const uint32_t MAGIC = save::magic("CHIX");
 static SaveData sv;
 static bool saveDue, saveFlag, hasSave;
+static uint8_t cardDue;                                     // frames to the save mirror's write on the SD card (Card.cpp putSave)
 static uint8_t pauseSel, titleSel, prevBtn;
 static const char *pauseNote;
 
@@ -1313,10 +1314,41 @@ void sim_advance(uint32_t us);
 void sim_waitInput();
 #endif
 
+// The flash save first; with none, the SD card's mirror (the DAT's last two blocks) gives it back (a save lost with the flash).
+static void loadSave() {
+    SaveData d;
+    uint8_t flag = 0;
+    hasSave = false;
+    if (save::load(MAGIC, 1, d, &flag)) {
+        hiScore = d.hi;
+        if (flag == 1) { hasSave = true; sv = d; }
+    } else {
+        uint8_t m[sizeof(SaveData) + 1];
+        if (card::getSave(m, sizeof m)) {
+            memcpy(&d, m, sizeof d);
+            hiScore = d.hi;
+            if (m[sizeof d] == 1) { hasSave = true; sv = d; }
+            saveFlag = m[sizeof d] == 1; sv = d; saveDue = true;   // and back into the flash
+        }
+    }
+}
+
+#if CHGAME_DEBUG
+static bool chixHook(char cmd, const char *a) {
+    switch (cmd) {
+    case 'W': { int l = (int)dbg::parseNum(a, 10), v = (int)dbg::parseNum(a, 10); level = l; lives = v; score = (int)dbg::parseNum(a, 10); saveProgress(true); return true; }   // W level lives score
+    case 'O': saveProgress(false); return true;
+    case 'V': loadSave(); state = TITLE; titleSel = 0; return true;                    // power cycle (simsave)
+    case 'A': { char b[96]; snprintf(b, sizeof b, "STATE save=%d hi=%ld level=%d lives=%d score=%ld\n", hasSave, (long)hiScore, hasSave ? sv.level : -1, hasSave ? sv.lives : -1, (long)(hasSave ? sv.score : -1)); dbg::print(b); return true; }
+    }
+    return false;
+}
+#endif
+
 void setup() {
     chgame.boot();
 #if CHGAME_DEBUG
-    dbg::begin("CHIX 1.4.7");
+    dbg::begin("CHIX 1.5.0");
 #endif
     gfx_begin(GFX_DIV2, GFX_12BPP);
     const uint16_t pal[16] = {
@@ -1329,13 +1361,11 @@ void setup() {
     applyTheme(0);
     synth::begin();
     synth::music(0);
-    chgame.setFrameRate(30);
-    SaveData d;
-    uint8_t flag = 0;
-    if (save::load(MAGIC, 1, d, &flag)) {
-        hiScore = d.hi;
-        if (flag == 1) { hasSave = true; sv = d; }
-    }
+    chgame.setFrameRate(40);
+    loadSave();
+#if CHGAME_DEBUG
+    dbg::hook = chixHook;
+#endif
     rng ^= millis();
     state = TITLE;
     resetField();
@@ -1362,6 +1392,13 @@ void loop() {
         save::store(MAGIC, 1, sv, saveFlag ? 1 : 0);
         hasSave = saveFlag && save::available();
         if (hasSave) titleSel = 0;
+        cardDue = 20;
+    }
+    if (cardDue && !--cardDue) {                                 // 20 frames after the last change: the SD card's copy (not in the same frame as the flash write)
+        uint8_t m[sizeof sv + 1];
+        memcpy(m, &sv, sizeof sv);
+        m[sizeof sv] = saveFlag ? 1 : 0;
+        card::putSave(m, sizeof m);
     }
     if (card::ok()) draw();
     else {                                                       // no card, or another build's: say so (it is tried again each second)
